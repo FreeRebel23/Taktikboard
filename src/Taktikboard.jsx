@@ -267,12 +267,19 @@ export default function Taktikboard() {
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [showPaths, setShowPaths] = useState(true);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
 
   const svgRef = useRef(null);
+  const viewportRef = useRef(null);
   const dragId = useRef(null);
   const stroke = useRef(null);
   const rafRef = useRef(null);
   const playRef = useRef(false);
+  const zoomRef = useRef(1);
+  const panRef = useRef({ x: 0, y: 0 });
+  const pointers = useRef(new Map());
+  const gesture = useRef({ active: false, lastDist: 0, lastMid: { x: 0, y: 0 }, W: 0, H: 0, left: 0, top: 0 });
 
   const VB = courtType === "half"
     ? { x: -8, y: -8, w: 166, h: 156 }
@@ -311,17 +318,69 @@ export default function Taktikboard() {
     return positions[id];
   };
 
+  /* ----- Zoom & Pan (Zwei-Finger-Gesten) ----- */
+  const applyZoom = (s, p) => {
+    zoomRef.current = s; panRef.current = p;
+    setZoom(s); setPan(p);
+  };
+
+  const resetZoom = () => applyZoom(1, { x: 0, y: 0 });
+
+  const clampPan = (s, p, W, H) => ({
+    x: Math.min(0, Math.max(-(s - 1) * W, p.x)),
+    y: Math.min(0, Math.max(-(s - 1) * H, p.y)),
+  });
+
+  const onViewportPointerDown = (e) => {
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      // Zweiter Finger: Ein-Finger-Interaktion abbrechen, Geste starten
+      dragId.current = null; stroke.current = null;
+      const r = viewportRef.current.getBoundingClientRect();
+      const [a, b] = [...pointers.current.values()];
+      gesture.current = {
+        active: true,
+        lastDist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+        lastMid: { x: (a.x + b.x) / 2 - r.left, y: (a.y + b.y) / 2 - r.top },
+        W: r.width, H: r.height, left: r.left, top: r.top,
+      };
+    }
+  };
+
+  const onViewportPointerMove = (e) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const g = gesture.current;
+    if (!g.active || pointers.current.size < 2) return;
+    const [a, b] = [...pointers.current.values()];
+    const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+    const mid = { x: (a.x + b.x) / 2 - g.left, y: (a.y + b.y) / 2 - g.top };
+    const sOld = zoomRef.current;
+    const sNew = Math.min(5, Math.max(1, sOld * (dist / g.lastDist)));
+    let t = {
+      x: mid.x - (sNew / sOld) * (g.lastMid.x - panRef.current.x),
+      y: mid.y - (sNew / sOld) * (g.lastMid.y - panRef.current.y),
+    };
+    t = clampPan(sNew, t, g.W, g.H);
+    g.lastDist = dist; g.lastMid = mid;
+    applyZoom(sNew, t);
+  };
+
+  const onViewportPointerUp = (e) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) gesture.current.active = false;
+  };
+
   /* ----- Pointer handling ----- */
   const onTokenDown = (e, id) => {
-    if (mode !== "move") return;
-    e.stopPropagation();
+    if (mode !== "move" || gesture.current.active) return;
     if (progress > 0) { setProgress(0); setPlaying(false); }
     dragId.current = id;
     try { svgRef.current.setPointerCapture(e.pointerId); } catch {}
   };
 
   const onSvgDown = (e) => {
-    if (mode === "move") return;
+    if (mode === "move" || gesture.current.active) return;
     const p = toCourt(e);
     stroke.current = mode === "pen"
       ? { type: "pen", points: [p] }
@@ -331,6 +390,7 @@ export default function Taktikboard() {
   };
 
   const onSvgMove = (e) => {
+    if (gesture.current.active) return;
     if (dragId.current) {
       const p = toCourt(e);
       const id = dragId.current;
@@ -359,6 +419,7 @@ export default function Taktikboard() {
     setProgress(0);
     setPlaying(false);
     setDrawings([]);
+    resetZoom();
   };
 
   const switchCourt = (t) => {
@@ -366,11 +427,13 @@ export default function Taktikboard() {
     setCourtType(t);
     setPositions(t === "half" ? DEFAULT_HALF : DEFAULT_FULL);
     setPreset(null); setProgress(0); setPlaying(false); setDrawings([]);
+    resetZoom();
   };
 
   const resetBoard = () => {
     setPositions(courtType === "half" ? DEFAULT_HALF : DEFAULT_FULL);
     setPreset(null); setProgress(0); setPlaying(false); setDrawings([]);
+    resetZoom();
   };
 
   const togglePlay = () => {
@@ -396,9 +459,10 @@ export default function Taktikboard() {
 
   return (
     <div style={{
-      minHeight: "100vh", background: "#14181C", color: "#E8E4DA",
+      position: "fixed", inset: 0, overflow: "hidden",
+      background: "#14181C", color: "#E8E4DA",
       fontFamily: "'Archivo Narrow','Arial Narrow','Roboto Condensed',system-ui,sans-serif",
-      display: "flex", flexDirection: "column", alignItems: "center",
+      display: "flex", flexDirection: "column",
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;700&display=swap');
@@ -407,21 +471,15 @@ export default function Taktikboard() {
         button:focus-visible{outline:2px solid ${OFF_COLOR};outline-offset:2px;}
       `}</style>
 
+      {/* ===== Obere Leiste (fix) ===== */}
       <div style={{
-        width: "100%", maxWidth: 560,
-        padding: "calc(14px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left))",
+        flexShrink: 0,
+        padding: "calc(8px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 6px calc(12px + env(safe-area-inset-left))",
       }}>
-
-        {/* Kopf */}
-        <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-              Taktik<span style={{ color: OFF_COLOR }}>board</span>
-            </h1>
-            <div style={{ fontSize: 12, color: "#8E9AA4", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-              Basketball · Halb- & Ganzfeld
-            </div>
-          </div>
+        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+            Taktik<span style={{ color: OFF_COLOR }}>board</span>
+          </h1>
           <div style={{ display: "flex", gap: 6 }}>
             <Btn active={courtType === "half"} onClick={() => switchCourt("half")}>Halbfeld</Btn>
             <Btn active={courtType === "full"} onClick={() => switchCourt("full")}>Ganzfeld</Btn>
@@ -429,7 +487,7 @@ export default function Taktikboard() {
         </header>
 
         {/* Spielzüge */}
-        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 4 }}>
+        <div style={{ display: "flex", gap: 6, overflowX: "auto" }}>
           {PRESETS.map((p) => (
             <Btn key={p.id} active={preset?.id === p.id} onClick={() => applyPreset(p)}
               tone={p.id === "zone23" ? DEF_COLOR : OFF_COLOR}>
@@ -439,16 +497,34 @@ export default function Taktikboard() {
         </div>
 
         {preset && (
-          <p style={{ margin: "2px 2px 10px", fontSize: 13.5, lineHeight: 1.45, color: "#B9C2C9" }}>
+          <p style={{
+            margin: "8px 2px 0", fontSize: 13, lineHeight: 1.4, color: "#B9C2C9",
+            display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden",
+          }}>
             {preset.note}
           </p>
         )}
+      </div>
 
+      {/* ===== Court (flexibel, füllt verfügbaren Platz) ===== */}
+      <div ref={viewportRef}
+        onPointerDown={onViewportPointerDown} onPointerMove={onViewportPointerMove}
+        onPointerUp={onViewportPointerUp} onPointerCancel={onViewportPointerUp}
+        style={{
+          flex: 1, minHeight: 0, position: "relative", overflow: "hidden",
+          touchAction: "none", padding: "6px 10px",
+        }}>
+        <div style={{
+          position: "absolute", inset: "6px 10px",
+          transformOrigin: "0 0",
+          transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`,
+          willChange: "transform",
+        }}>
         {/* Feld */}
         <svg ref={svgRef}
           viewBox={`${VB.x} ${VB.y} ${VB.w} ${VB.h}`}
-          style={{ width: "100%", display: "block", borderRadius: 10, touchAction: "none",
-            boxShadow: "0 6px 24px rgba(0,0,0,0.45)" }}
+          preserveAspectRatio="xMidYMid meet"
+          style={{ width: "100%", height: "100%", display: "block", touchAction: "none" }}
           onPointerDown={onSvgDown} onPointerMove={onSvgMove}
           onPointerUp={onSvgUp} onPointerCancel={onSvgUp}>
 
@@ -500,10 +576,27 @@ export default function Taktikboard() {
           ))}
           <BallToken pos={displayPos("ball")} onDown={onTokenDown} interactive={mode === "move"} />
         </svg>
+        </div>
 
+        {/* Zoom-Reset (nur sichtbar wenn gezoomt) */}
+        {zoom > 1.01 && (
+          <button onClick={resetZoom} style={{
+            position: "absolute", top: 12, right: 16, zIndex: 5,
+            padding: "6px 11px", borderRadius: 8, fontSize: 13, fontWeight: 700,
+            fontFamily: "inherit", cursor: "pointer", color: "#16110C",
+            background: OFF_COLOR, border: "none", boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+          }}>⊙ {zoom.toFixed(1)}×</button>
+        )}
+      </div>
+
+      {/* ===== Untere Leiste (fix, immer sichtbar) ===== */}
+      <div style={{
+        flexShrink: 0, borderTop: "1px solid #232B32", background: "#171C21",
+        padding: "10px calc(12px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left))",
+      }}>
         {/* Abspielen */}
         {preset?.anim && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
             <Btn active onClick={togglePlay}>
               {playing ? "❚❚ Pause" : progress >= 1 ? "↻ Nochmal" : "▶ Abspielen"}
             </Btn>
@@ -515,21 +608,14 @@ export default function Taktikboard() {
         )}
 
         {/* Werkzeuge */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           <Btn active={mode === "move"} onClick={() => setMode("move")}>✥ Bewegen</Btn>
           <Btn active={mode === "pen"} onClick={() => setMode("pen")}>✎ Stift</Btn>
           <Btn active={mode === "arrow"} onClick={() => setMode("arrow")}>↗ Pfeil</Btn>
           <Btn onClick={() => setDrawings((d) => d.slice(0, -1))}>⌫ Rückgängig</Btn>
-          <Btn onClick={() => setDrawings([])}>Zeichnung leeren</Btn>
+          <Btn onClick={() => setDrawings([])}>Leeren</Btn>
           <Btn active={showDef} tone={DEF_COLOR} onClick={() => setShowDef((s) => !s)}>Verteidigung</Btn>
           <Btn onClick={resetBoard}>Reset</Btn>
-        </div>
-
-        {/* Legende */}
-        <div style={{ display: "flex", gap: 16, marginTop: 14, fontSize: 12.5, color: "#8E9AA4" }}>
-          <span><span style={{ color: OFF_COLOR }}>●</span> Angriff 1–5</span>
-          <span><span style={{ color: DEF_COLOR }}>●</span> Verteidigung X1–X5</span>
-          <span><span style={{ color: BALL_COLOR }}>●</span> Ball</span>
         </div>
       </div>
     </div>
