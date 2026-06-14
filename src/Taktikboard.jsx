@@ -15,6 +15,9 @@ const BALL_COLOR = "#D96A23";
 const OFF = ["o1", "o2", "o3", "o4", "o5"];
 const DEF = ["d1", "d2", "d3", "d4", "d5"];
 
+const SNAP_PX = 60;                          // Snap-Radius in Bildschirm-Pixeln
+const BALL_OFFSET = { x: 6.5, y: -6.5 };     // Ball sitzt an der Schulter des Trägers
+
 const DEFAULT_HALF = {
   o1: { x: 75, y: 95 }, o2: { x: 122, y: 72 }, o3: { x: 28, y: 72 },
   o4: { x: 118, y: 30 }, o5: { x: 52, y: 30 },
@@ -269,10 +272,12 @@ export default function Taktikboard() {
   const [showPaths, setShowPaths] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [ballOwnerId, setBallOwnerId] = useState(null); // "o1".."o5" / "d1".."d5" oder null
 
   const svgRef = useRef(null);
   const viewportRef = useRef(null);
   const dragId = useRef(null);
+  const ballPosRef = useRef(null);
   const stroke = useRef(null);
   const rafRef = useRef(null);
   const playRef = useRef(false);
@@ -285,12 +290,16 @@ export default function Taktikboard() {
     ? { x: -8, y: -8, w: 166, h: 156 }
     : { x: -8, y: -8, w: 166, h: 296 };
 
+  // Maßstab der gezeichneten viewBox (preserveAspectRatio="xMidYMid meet"):
+  // px pro Court-Einheit – berücksichtigt Letterboxing UND den Zoom-Transform.
+  const courtScale = (r) => Math.min(r.width / VB.w, r.height / VB.h);
+
   const toCourt = useCallback((e) => {
     const r = svgRef.current.getBoundingClientRect();
-    return {
-      x: ((e.clientX - r.left) / r.width) * VB.w + VB.x,
-      y: ((e.clientY - r.top) / r.height) * VB.h + VB.y,
-    };
+    const s = Math.min(r.width / VB.w, r.height / VB.h);
+    const offX = r.left + (r.width - VB.w * s) / 2;
+    const offY = r.top + (r.height - VB.h * s) / 2;
+    return { x: (e.clientX - offX) / s + VB.x, y: (e.clientY - offY) / s + VB.y };
   }, [VB.w, VB.h, VB.x, VB.y]);
 
   /* ----- Animation loop ----- */
@@ -315,6 +324,11 @@ export default function Taktikboard() {
   /* ----- Display position (Animation überlagert State) ----- */
   const displayPos = (id) => {
     if (preset?.anim?.[id] && progress > 0) return interpKF(preset.anim[id], progress);
+    // Ball klebt am Träger (sofern keine Spielzug-Animation den Ball steuert)
+    if (id === "ball" && ballOwnerId && positions[ballOwnerId]) {
+      const o = displayPos(ballOwnerId);
+      return { x: o.x + BALL_OFFSET.x, y: o.y + BALL_OFFSET.y };
+    }
     return positions[id];
   };
 
@@ -375,6 +389,15 @@ export default function Taktikboard() {
   const onTokenDown = (e, id) => {
     if (mode !== "move" || gesture.current.active) return;
     if (progress > 0) { setProgress(0); setPlaying(false); }
+    if (id === "ball" && ballOwnerId) {
+      // Ball löst sich vom Träger – an aktueller (Schulter-)Position weiterziehen
+      const start = displayPos("ball");
+      setPositions((pos) => ({ ...pos, ball: { ...start } }));
+      setBallOwnerId(null);
+      ballPosRef.current = start;
+    } else if (id === "ball") {
+      ballPosRef.current = positions.ball;
+    }
     dragId.current = id;
     try { svgRef.current.setPointerCapture(e.pointerId); } catch {}
   };
@@ -395,10 +418,9 @@ export default function Taktikboard() {
       const p = toCourt(e);
       const id = dragId.current;
       const maxY = courtType === "half" ? 140 : 280;
-      setPositions((pos) => ({
-        ...pos,
-        [id]: { x: Math.max(0, Math.min(150, p.x)), y: Math.max(0, Math.min(maxY, p.y)) },
-      }));
+      const np = { x: Math.max(0, Math.min(150, p.x)), y: Math.max(0, Math.min(maxY, p.y)) };
+      if (id === "ball") ballPosRef.current = np;
+      setPositions((pos) => ({ ...pos, [id]: np }));
     } else if (stroke.current) {
       const p = toCourt(e);
       if (stroke.current.type === "pen") stroke.current.points.push(p);
@@ -407,7 +429,26 @@ export default function Taktikboard() {
     }
   };
 
-  const onSvgUp = () => { dragId.current = null; stroke.current = null; };
+  const onSvgUp = () => {
+    if (dragId.current === "ball" && ballPosRef.current) snapBall(ballPosRef.current);
+    dragId.current = null; stroke.current = null;
+  };
+
+  // Snap: liegt der losgelassene Ball innerhalb SNAP_PX eines sichtbaren
+  // Spieler-Mittelpunkts, übernimmt dieser Spieler den Ball.
+  const snapBall = (ballPos) => {
+    const r = svgRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const thr = SNAP_PX / courtScale(r); // 60px -> Court-Einheiten (zoom-/letterbox-genau)
+    const ids = showDef ? [...OFF, ...DEF] : OFF;
+    let best = null, bestD = thr;
+    for (const pid of ids) {
+      const p = positions[pid];
+      const d = Math.hypot(p.x - ballPos.x, p.y - ballPos.y);
+      if (d <= bestD) { bestD = d; best = pid; }
+    }
+    setBallOwnerId(best);
+  };
 
   /* ----- Aktionen ----- */
   const applyPreset = (p) => {
@@ -420,6 +461,7 @@ export default function Taktikboard() {
     setPlaying(false);
     setDrawings([]);
     resetZoom();
+    setBallOwnerId(null);
   };
 
   const switchCourt = (t) => {
@@ -428,12 +470,27 @@ export default function Taktikboard() {
     setPositions(t === "half" ? DEFAULT_HALF : DEFAULT_FULL);
     setPreset(null); setProgress(0); setPlaying(false); setDrawings([]);
     resetZoom();
+    setBallOwnerId(null);
   };
 
   const resetBoard = () => {
     setPositions(courtType === "half" ? DEFAULT_HALF : DEFAULT_FULL);
     setPreset(null); setProgress(0); setPlaying(false); setDrawings([]);
     resetZoom();
+    setBallOwnerId(null);
+  };
+
+  // Verteidigung ausblenden: hält ein Verteidiger den Ball, fällt der Ball frei
+  // an seine letzte Position zurück.
+  const toggleDef = () => {
+    setShowDef((s) => {
+      if (s && ballOwnerId?.startsWith("d")) {
+        const here = displayPos("ball");
+        setPositions((pos) => ({ ...pos, ball: { ...here } }));
+        setBallOwnerId(null);
+      }
+      return !s;
+    });
   };
 
   const togglePlay = () => {
@@ -614,7 +671,7 @@ export default function Taktikboard() {
           <Btn active={mode === "arrow"} onClick={() => setMode("arrow")}>↗ Pfeil</Btn>
           <Btn onClick={() => setDrawings((d) => d.slice(0, -1))}>⌫ Rückgängig</Btn>
           <Btn onClick={() => setDrawings([])}>Leeren</Btn>
-          <Btn active={showDef} tone={DEF_COLOR} onClick={() => setShowDef((s) => !s)}>Verteidigung</Btn>
+          <Btn active={showDef} tone={DEF_COLOR} onClick={toggleDef}>Verteidigung</Btn>
           <Btn onClick={resetBoard}>Reset</Btn>
         </div>
       </div>
