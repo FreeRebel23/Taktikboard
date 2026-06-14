@@ -18,6 +18,18 @@ const DEF = ["d1", "d2", "d3", "d4", "d5"];
 const SNAP_PX = 60;                          // Snap-Radius in Bildschirm-Pixeln
 const BALL_OFFSET = { x: 6.5, y: -6.5 };     // Ball sitzt an der Schulter des Trägers
 
+const REC_COLOR = "#E0463A";
+const FRAME_MS = 100;                         // Aufnahme-/Replay-Takt
+const SEQ_KEY = "taktikboard.sequences.v1";   // localStorage-Schlüssel
+
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const loadSeqs = () => {
+  try { return JSON.parse(localStorage.getItem(SEQ_KEY)) || []; } catch { return []; }
+};
+const persistSeqs = (arr) => {
+  try { localStorage.setItem(SEQ_KEY, JSON.stringify(arr)); } catch {}
+};
+
 const DEFAULT_HALF = {
   o1: { x: 75, y: 95 }, o2: { x: 122, y: 72 }, o3: { x: 28, y: 72 },
   o4: { x: 118, y: 30 }, o5: { x: 52, y: 30 },
@@ -273,6 +285,13 @@ export default function Taktikboard() {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [ballOwnerId, setBallOwnerId] = useState(null); // "o1".."o5" / "d1".."d5" oder null
+  const [recording, setRecording] = useState(false);
+  const [hasRecording, setHasRecording] = useState(false);
+  const [replaying, setReplaying] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const [sequences, setSequences] = useState(loadSeqs);
+  const [activeSeqId, setActiveSeqId] = useState(null);
 
   const svgRef = useRef(null);
   const viewportRef = useRef(null);
@@ -281,6 +300,9 @@ export default function Taktikboard() {
   const stroke = useRef(null);
   const rafRef = useRef(null);
   const playRef = useRef(false);
+  const snapRef = useRef(null);    // immer aktueller Board-State (für Aufnahme)
+  const bufferRef = useRef([]);    // temporärer Aufnahme-Buffer
+  const replayTimer = useRef(null);
   const zoomRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
   const pointers = useRef(new Map());
@@ -320,6 +342,83 @@ export default function Taktikboard() {
     rafRef.current = requestAnimationFrame(step);
     return () => cancelAnimationFrame(rafRef.current);
   }, [playing]);
+
+  /* ----- Aufnahme & Replay ----- */
+  // Spiegelt den aktuellen Board-State (für die Aufnahme-Schleife)
+  snapRef.current = { positions, ballOwnerId, drawings, showDef, courtType };
+
+  // Aufnahme: alle FRAME_MS ein vollständiger Snapshot in den Buffer
+  useEffect(() => {
+    if (!recording) return;
+    const tick = () => bufferRef.current.push(clone(snapRef.current));
+    tick(); // sofort ersten Frame sichern
+    const iv = setInterval(tick, FRAME_MS);
+    return () => clearInterval(iv);
+  }, [recording]);
+
+  const stopReplay = () => {
+    if (replayTimer.current) { clearTimeout(replayTimer.current); replayTimer.current = null; }
+    setReplaying(false);
+  };
+
+  const applyFrame = (f) => {
+    setCourtType(f.courtType);
+    setPositions(f.positions);
+    setBallOwnerId(f.ballOwnerId);
+    setDrawings(f.drawings);
+    setShowDef(f.showDef);
+  };
+
+  const playFrames = (frames) => {
+    if (!frames || !frames.length) return;
+    stopReplay();
+    setPreset(null); setProgress(0); setPlaying(false);
+    setReplaying(true);
+    let i = 0;
+    const step = () => {
+      if (i >= frames.length) { replayTimer.current = null; setReplaying(false); return; }
+      applyFrame(frames[i]); i += 1;
+      replayTimer.current = setTimeout(step, FRAME_MS);
+    };
+    step();
+  };
+
+  const startRec = () => {
+    stopReplay();
+    setPlaying(false);
+    bufferRef.current = [];
+    setHasRecording(false);
+    setSaving(false); setSaveName("");
+    setActiveSeqId(null);
+    setRecording(true);
+  };
+
+  const stopRec = () => {
+    setRecording(false);
+    setHasRecording(bufferRef.current.length > 0);
+  };
+
+  const saveRecording = () => {
+    if (!bufferRef.current.length) return;
+    const name = saveName.trim() || `Sequenz ${sequences.length + 1}`;
+    const seq = { id: "seq_" + Date.now(), name, frames: clone(bufferRef.current) };
+    const next = [...sequences, seq];
+    setSequences(next); persistSeqs(next);
+    setSaving(false); setSaveName("");
+  };
+
+  const playSequence = (seq) => {
+    if (recording) stopRec();
+    setActiveSeqId(seq.id);
+    resetZoom();
+    playFrames(seq.frames);
+  };
+
+  const deleteSequence = (id) => {
+    const next = sequences.filter((s) => s.id !== id);
+    setSequences(next); persistSeqs(next);
+    if (activeSeqId === id) setActiveSeqId(null);
+  };
 
   /* ----- Display position (Animation überlagert State) ----- */
   const displayPos = (id) => {
@@ -387,7 +486,7 @@ export default function Taktikboard() {
 
   /* ----- Pointer handling ----- */
   const onTokenDown = (e, id) => {
-    if (mode !== "move" || gesture.current.active) return;
+    if (mode !== "move" || gesture.current.active || replaying) return;
     if (progress > 0) { setProgress(0); setPlaying(false); }
     if (id === "ball" && ballOwnerId) {
       // Ball löst sich vom Träger – an aktueller (Schulter-)Position weiterziehen
@@ -403,7 +502,7 @@ export default function Taktikboard() {
   };
 
   const onSvgDown = (e) => {
-    if (mode === "move" || gesture.current.active) return;
+    if (mode === "move" || gesture.current.active || replaying) return;
     const p = toCourt(e);
     stroke.current = mode === "pen"
       ? { type: "pen", points: [p] }
@@ -413,7 +512,7 @@ export default function Taktikboard() {
   };
 
   const onSvgMove = (e) => {
-    if (gesture.current.active) return;
+    if (gesture.current.active || replaying) return;
     if (dragId.current) {
       const p = toCourt(e);
       const id = dragId.current;
@@ -462,6 +561,7 @@ export default function Taktikboard() {
     setDrawings([]);
     resetZoom();
     setBallOwnerId(null);
+    stopReplay(); setActiveSeqId(null);
   };
 
   const switchCourt = (t) => {
@@ -471,6 +571,7 @@ export default function Taktikboard() {
     setPreset(null); setProgress(0); setPlaying(false); setDrawings([]);
     resetZoom();
     setBallOwnerId(null);
+    stopReplay(); setActiveSeqId(null);
   };
 
   const resetBoard = () => {
@@ -478,6 +579,7 @@ export default function Taktikboard() {
     setPreset(null); setProgress(0); setPlaying(false); setDrawings([]);
     resetZoom();
     setBallOwnerId(null);
+    stopReplay(); setActiveSeqId(null);
   };
 
   // Verteidigung ausblenden: hält ein Verteidiger den Ball, fällt der Ball frei
@@ -526,6 +628,7 @@ export default function Taktikboard() {
         input[type=range]{accent-color:${OFF_COLOR};}
         ::-webkit-scrollbar{height:0;width:0;}
         button:focus-visible{outline:2px solid ${OFF_COLOR};outline-offset:2px;}
+        @keyframes recpulse{0%,100%{opacity:1;}50%{opacity:0.25;}}
       `}</style>
 
       {/* ===== Obere Leiste (fix) ===== */}
@@ -543,13 +646,27 @@ export default function Taktikboard() {
           </div>
         </header>
 
-        {/* Spielzüge */}
+        {/* Spielzüge + gespeicherte Aufnahmen */}
         <div style={{ display: "flex", gap: 6, overflowX: "auto" }}>
           {PRESETS.map((p) => (
             <Btn key={p.id} active={preset?.id === p.id} onClick={() => applyPreset(p)}
               tone={p.id === "zone23" ? DEF_COLOR : OFF_COLOR}>
               {p.name}
             </Btn>
+          ))}
+          {sequences.map((seq) => (
+            <span key={seq.id} style={{ display: "inline-flex", flexShrink: 0, alignItems: "stretch", gap: 2 }}>
+              <Btn active={activeSeqId === seq.id} tone={REC_COLOR} onClick={() => playSequence(seq)}>
+                ▶ {seq.name}
+              </Btn>
+              <button onClick={() => { if (window.confirm(`Sequenz „${seq.name}“ löschen?`)) deleteSequence(seq.id); }}
+                title="Aufnahme löschen" aria-label={`Aufnahme ${seq.name} löschen`}
+                style={{
+                  padding: "0 8px", borderRadius: 8, fontSize: 13, fontWeight: 700,
+                  fontFamily: "inherit", cursor: "pointer", border: "1px solid #39424B",
+                  background: "#232B32", color: "#8E9AA4",
+                }}>✕</button>
+            </span>
           ))}
         </div>
 
@@ -661,6 +778,57 @@ export default function Taktikboard() {
               onChange={(e) => { setPlaying(false); setProgress(parseFloat(e.target.value)); }}
               style={{ flex: 1 }} aria-label="Spielzug-Fortschritt" />
             <Btn active={showPaths} onClick={() => setShowPaths((s) => !s)}>Wege</Btn>
+          </div>
+        )}
+
+        {/* Aufnahme & Replay */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 8 }}>
+          {!recording ? (
+            <Btn active={false} tone={REC_COLOR} onClick={startRec}>
+              <span style={{ display: "inline-block", width: 9, height: 9, borderRadius: "50%",
+                background: REC_COLOR, marginRight: 6, verticalAlign: "middle" }} />
+              REC
+            </Btn>
+          ) : (
+            <Btn active tone={REC_COLOR} onClick={stopRec}>
+              <span style={{ display: "inline-block", width: 9, height: 9, borderRadius: "50%",
+                background: "#16110C", marginRight: 6, verticalAlign: "middle",
+                animation: "recpulse 1s infinite" }} />
+              ■ Stop
+            </Btn>
+          )}
+
+          {!recording && hasRecording && (
+            <>
+              <Btn active={replaying} tone={OFF_COLOR}
+                onClick={() => (replaying ? stopReplay() : playFrames(bufferRef.current))}>
+                {replaying ? "■ Stopp" : "▶ Replay"}
+              </Btn>
+              <Btn active={saving} onClick={() => setSaving((s) => !s)}>✓ Speichern</Btn>
+            </>
+          )}
+
+          {recording && (
+            <span style={{ fontSize: 12.5, color: REC_COLOR, letterSpacing: "0.04em" }}>
+              Aufnahme läuft …
+            </span>
+          )}
+        </div>
+
+        {/* Speichern-Feld */}
+        {saving && !recording && (
+          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            <input value={saveName} autoFocus
+              onChange={(e) => setSaveName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") saveRecording(); }}
+              placeholder="Name der Sequenz, z. B. Pick & Roll Mitte"
+              style={{
+                flex: 1, minWidth: 0, padding: "7px 10px", borderRadius: 8, fontSize: 13,
+                fontFamily: "inherit", color: "#E8E4DA", background: "#232B32",
+                border: "1px solid #39424B", outline: "none",
+              }} />
+            <Btn active onClick={saveRecording}>Sichern</Btn>
+            <Btn onClick={() => { setSaving(false); setSaveName(""); }}>Abbrechen</Btn>
           </div>
         )}
 
