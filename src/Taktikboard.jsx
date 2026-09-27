@@ -1,244 +1,19 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import Court, { viewBoxFor } from "./court/Court.jsx";
+import { OFF_COLOR, DEF_COLOR, BALL_COLOR, REC_COLOR, CHALK, OFF, DEF, courtHeight } from "./court/constants.js";
+import { PRESETS, DEFAULT_HALF, DEFAULT_FULL, interpKF } from "./legacy/presets.js";
+import { FRAME_MS, clone, loadSeqs, persistSeqs } from "./legacy/recordingStore.js";
+import useZoomPan from "./hooks/useZoomPan.js";
+import Btn from "./ui/Btn.jsx";
 
 /* ============================================================
    TAKTIKBOARD – Basketball Coach Board
    Halbfeld / Ganzfeld · Drag & Drop · Zeichnen · Spielzug-Animation
-   Koordinaten: Breite 0–150 (15 m), Tiefe ab Grundlinie (Korb oben)
+   Koordinaten: siehe court/constants.js
    ============================================================ */
-
-const HOOP_Y = 15.75;
-const CHALK = "#EDE8DC";
-const OFF_COLOR = "#F2762E";
-const DEF_COLOR = "#5B8BB2";
-const BALL_COLOR = "#D96A23";
-
-const OFF = ["o1", "o2", "o3", "o4", "o5"];
-const DEF = ["d1", "d2", "d3", "d4", "d5"];
 
 const SNAP_PX = 60;                          // Snap-Radius in Bildschirm-Pixeln
 const BALL_OFFSET = { x: 6.5, y: -6.5 };     // Ball sitzt an der Schulter des Trägers
-
-const REC_COLOR = "#E0463A";
-const FRAME_MS = 100;                         // Aufnahme-/Replay-Takt
-const SEQ_KEY = "taktikboard.sequences.v1";   // localStorage-Schlüssel
-
-const clone = (o) => JSON.parse(JSON.stringify(o));
-const loadSeqs = () => {
-  try { return JSON.parse(localStorage.getItem(SEQ_KEY)) || []; } catch { return []; }
-};
-const persistSeqs = (arr) => {
-  try { localStorage.setItem(SEQ_KEY, JSON.stringify(arr)); } catch {}
-};
-
-const DEFAULT_HALF = {
-  o1: { x: 75, y: 95 }, o2: { x: 122, y: 72 }, o3: { x: 28, y: 72 },
-  o4: { x: 118, y: 30 }, o5: { x: 52, y: 30 },
-  d1: { x: 75, y: 80 }, d2: { x: 108, y: 60 }, d3: { x: 42, y: 60 },
-  d4: { x: 105, y: 30 }, d5: { x: 60, y: 34 },
-  ball: { x: 81, y: 91 },
-};
-
-const DEFAULT_FULL = {
-  o1: { x: 75, y: 200 }, o2: { x: 120, y: 215 }, o3: { x: 30, y: 215 },
-  o4: { x: 95, y: 240 }, o5: { x: 55, y: 240 },
-  d1: { x: 75, y: 95 }, d2: { x: 115, y: 70 }, d3: { x: 35, y: 70 },
-  d4: { x: 100, y: 35 }, d5: { x: 55, y: 35 },
-  ball: { x: 81, y: 196 },
-};
-
-/* ---------------- Presets ---------------- */
-
-const PRESETS = [
-  {
-    id: "five_out", name: "5-Out Grundaufstellung", court: "half", showDef: false,
-    note: "Maximaler Raum: alle fünf Positionen hinter der Dreierlinie. Basis für Cuts und Drives.",
-    pos: {
-      o1: { x: 75, y: 96 }, o2: { x: 124, y: 70 }, o3: { x: 26, y: 70 },
-      o4: { x: 140, y: 16 }, o5: { x: 10, y: 16 }, ball: { x: 81, y: 92 },
-    },
-  },
-  {
-    id: "pnr_top", name: "Pick & Roll – Mitte", court: "half", showDef: false,
-    note: "5 stellt den Block oben am Perimeter, 1 zieht über den Block nach rechts, 5 rollt zum Korb – Pocket-Pass auf den Roller.",
-    pos: {
-      o1: { x: 75, y: 98 }, o2: { x: 140, y: 16 }, o3: { x: 10, y: 16 },
-      o4: { x: 28, y: 68 }, o5: { x: 62, y: 62 }, ball: { x: 80, y: 94 },
-    },
-    anim: {
-      o5: [{ t: 0, x: 62, y: 62 }, { t: 0.3, x: 84, y: 92 }, { t: 0.55, x: 84, y: 92 }, { t: 1, x: 62, y: 34 }],
-      o1: [{ t: 0, x: 75, y: 98 }, { t: 0.35, x: 75, y: 98 }, { t: 0.6, x: 95, y: 85 }, { t: 0.8, x: 102, y: 62 }, { t: 1, x: 94, y: 46 }],
-      ball: [{ t: 0, x: 80, y: 94 }, { t: 0.35, x: 80, y: 94 }, { t: 0.6, x: 100, y: 82 }, { t: 0.8, x: 107, y: 60 }, { t: 0.9, x: 99, y: 48 }, { t: 1, x: 66, y: 36 }],
-      o4: [{ t: 0, x: 28, y: 68 }, { t: 1, x: 22, y: 82 }],
-    },
-  },
-  {
-    id: "pnr_wing", name: "Pick & Roll – Flügel", court: "half", showDef: false,
-    note: "Side-P&R rechts: 5 blockt am Flügel, 1 zieht zur Mitte, 5 rollt – Kick-out in die schwache Ecke bleibt offen.",
-    pos: {
-      o1: { x: 118, y: 75 }, o2: { x: 75, y: 98 }, o3: { x: 12, y: 70 },
-      o4: { x: 10, y: 16 }, o5: { x: 95, y: 48 }, ball: { x: 123, y: 71 },
-    },
-    anim: {
-      o5: [{ t: 0, x: 95, y: 48 }, { t: 0.3, x: 113, y: 82 }, { t: 0.5, x: 113, y: 82 }, { t: 1, x: 88, y: 28 }],
-      o1: [{ t: 0, x: 118, y: 75 }, { t: 0.35, x: 118, y: 75 }, { t: 0.6, x: 98, y: 82 }, { t: 0.8, x: 82, y: 62 }, { t: 1, x: 78, y: 44 }],
-      ball: [{ t: 0, x: 123, y: 71 }, { t: 0.35, x: 123, y: 71 }, { t: 0.6, x: 102, y: 80 }, { t: 0.82, x: 84, y: 60 }, { t: 0.9, x: 80, y: 46 }, { t: 1, x: 14, y: 20 }],
-      o2: [{ t: 0, x: 75, y: 98 }, { t: 0.5, x: 75, y: 98 }, { t: 1, x: 115, y: 72 }],
-      o3: [{ t: 0, x: 12, y: 70 }, { t: 0.6, x: 12, y: 70 }, { t: 1, x: 12, y: 55 }],
-    },
-  },
-  {
-    id: "triangle", name: "Triangle Offense", court: "half", showDef: false,
-    note: "Sideline-Triangle rechts: Post (5) – Ecke (2) – Flügel (3). Pass in die Ecke, 3 schneidet über den Post, 1 füllt den Flügel nach.",
-    pos: {
-      o1: { x: 60, y: 92 }, o2: { x: 138, y: 14 }, o3: { x: 120, y: 68 },
-      o4: { x: 52, y: 58 }, o5: { x: 98, y: 25 }, ball: { x: 124, y: 64 },
-    },
-    shapes: [{ type: "poly", points: [[98, 25], [138, 14], [120, 68]] }],
-    anim: {
-      ball: [{ t: 0, x: 124, y: 64 }, { t: 0.2, x: 124, y: 64 }, { t: 0.35, x: 136, y: 18 }, { t: 1, x: 136, y: 18 }],
-      o3: [{ t: 0, x: 120, y: 68 }, { t: 0.35, x: 120, y: 68 }, { t: 0.6, x: 95, y: 35 }, { t: 1, x: 32, y: 20 }],
-      o1: [{ t: 0, x: 60, y: 92 }, { t: 0.45, x: 60, y: 92 }, { t: 1, x: 114, y: 66 }],
-      o4: [{ t: 0, x: 52, y: 58 }, { t: 0.5, x: 52, y: 58 }, { t: 1, x: 70, y: 90 }],
-      o5: [{ t: 0, x: 98, y: 25 }, { t: 0.6, x: 98, y: 25 }, { t: 1, x: 93, y: 28 }],
-    },
-  },
-  {
-    id: "horns", name: "Horns", court: "half", showDef: false,
-    note: "Beide Bigs an den Ellbogen, Schützen in den Ecken. 5 blockt und rollt zum Korb, 4 poppt nach außen – zwei Optionen aus einem Set.",
-    pos: {
-      o1: { x: 75, y: 98 }, o2: { x: 140, y: 16 }, o3: { x: 10, y: 16 },
-      o4: { x: 54, y: 60 }, o5: { x: 96, y: 60 }, ball: { x: 80, y: 94 },
-    },
-    anim: {
-      o5: [{ t: 0, x: 96, y: 60 }, { t: 0.3, x: 83, y: 92 }, { t: 0.5, x: 83, y: 92 }, { t: 1, x: 68, y: 32 }],
-      o1: [{ t: 0, x: 75, y: 98 }, { t: 0.35, x: 75, y: 98 }, { t: 0.6, x: 95, y: 84 }, { t: 0.85, x: 98, y: 60 }, { t: 1, x: 90, y: 48 }],
-      o4: [{ t: 0, x: 54, y: 60 }, { t: 0.5, x: 54, y: 60 }, { t: 1, x: 44, y: 86 }],
-      ball: [{ t: 0, x: 80, y: 94 }, { t: 0.35, x: 80, y: 94 }, { t: 0.6, x: 100, y: 82 }, { t: 0.85, x: 103, y: 58 }, { t: 0.92, x: 94, y: 50 }, { t: 1, x: 70, y: 34 }],
-    },
-  },
-  {
-    id: "fastbreak3", name: "Fast Break – 3 Bahnen", court: "full", showDef: false,
-    note: "Klassischer 3-Bahnen-Break: Ball in der Mitte, Flügel sprinten breit in die Bahnen, Abschluss über die rechte Seite. 4 läuft als Trailer, 5 sichert.",
-    pos: {
-      o1: { x: 75, y: 235 }, o2: { x: 125, y: 250 }, o3: { x: 25, y: 250 },
-      o4: { x: 90, y: 265 }, o5: { x: 60, y: 270 }, ball: { x: 80, y: 231 },
-    },
-    anim: {
-      o1: [{ t: 0, x: 75, y: 235 }, { t: 0.5, x: 75, y: 140 }, { t: 0.8, x: 75, y: 75 }, { t: 1, x: 75, y: 58 }],
-      o2: [{ t: 0, x: 125, y: 250 }, { t: 0.45, x: 136, y: 150 }, { t: 0.8, x: 136, y: 60 }, { t: 1, x: 112, y: 30 }],
-      o3: [{ t: 0, x: 25, y: 250 }, { t: 0.45, x: 14, y: 150 }, { t: 0.8, x: 14, y: 60 }, { t: 1, x: 38, y: 30 }],
-      o4: [{ t: 0, x: 90, y: 265 }, { t: 0.6, x: 95, y: 150 }, { t: 1, x: 95, y: 72 }],
-      o5: [{ t: 0, x: 60, y: 270 }, { t: 1, x: 75, y: 155 }],
-      ball: [{ t: 0, x: 80, y: 231 }, { t: 0.5, x: 80, y: 138 }, { t: 0.82, x: 80, y: 74 }, { t: 1, x: 110, y: 32 }],
-    },
-  },
-  {
-    id: "fastbreak5", name: "Primärbreak – 5 Bahnen", court: "full", showDef: false,
-    note: "Rebound durch 5, Outlet auf 1 an der Seitenlinie. 1 pusht die Mitte, 2 und 3 besetzen die Ecken, 4 läuft als Rim-Runner zum Ring, 5 bleibt Safety.",
-    pos: {
-      o1: { x: 120, y: 235 }, o2: { x: 135, y: 250 }, o3: { x: 20, y: 250 },
-      o4: { x: 60, y: 265 }, o5: { x: 75, y: 262 }, ball: { x: 79, y: 259 },
-    },
-    anim: {
-      ball: [{ t: 0, x: 79, y: 259 }, { t: 0.15, x: 118, y: 233 }, { t: 0.5, x: 84, y: 180 }, { t: 0.75, x: 80, y: 92 }, { t: 0.85, x: 78, y: 62 }, { t: 1, x: 136, y: 32 }],
-      o1: [{ t: 0, x: 120, y: 235 }, { t: 0.15, x: 120, y: 235 }, { t: 0.5, x: 85, y: 180 }, { t: 0.78, x: 80, y: 92 }, { t: 1, x: 76, y: 58 }],
-      o2: [{ t: 0, x: 135, y: 250 }, { t: 0.5, x: 138, y: 120 }, { t: 1, x: 138, y: 28 }],
-      o3: [{ t: 0, x: 20, y: 250 }, { t: 0.5, x: 12, y: 120 }, { t: 1, x: 12, y: 26 }],
-      o4: [{ t: 0, x: 60, y: 265 }, { t: 0.55, x: 70, y: 140 }, { t: 1, x: 70, y: 42 }],
-      o5: [{ t: 0, x: 75, y: 262 }, { t: 0.3, x: 75, y: 262 }, { t: 1, x: 75, y: 162 }],
-    },
-  },
-  {
-    id: "zone23", name: "2-3 Zone (Defense)", court: "half", showDef: true,
-    note: "Zonenverschiebung bei Ballbewegung: Swing von oben über den Flügel in die Ecke – die Zone rotiert mit, 4 schließt die Ecke, 5 sichert die Zone unter dem Korb.",
-    pos: {
-      o1: { x: 75, y: 95 }, o2: { x: 125, y: 72 }, o3: { x: 25, y: 72 },
-      o4: { x: 138, y: 18 }, o5: { x: 12, y: 18 }, ball: { x: 80, y: 91 },
-      d1: { x: 52, y: 70 }, d2: { x: 98, y: 70 }, d3: { x: 22, y: 34 },
-      d4: { x: 128, y: 34 }, d5: { x: 75, y: 26 },
-    },
-    anim: {
-      ball: [{ t: 0, x: 80, y: 91 }, { t: 0.15, x: 80, y: 91 }, { t: 0.35, x: 122, y: 70 }, { t: 0.6, x: 122, y: 70 }, { t: 0.78, x: 136, y: 22 }, { t: 1, x: 136, y: 22 }],
-      d1: [{ t: 0, x: 52, y: 70 }, { t: 0.45, x: 68, y: 74 }, { t: 1, x: 82, y: 72 }],
-      d2: [{ t: 0, x: 98, y: 70 }, { t: 0.45, x: 113, y: 66 }, { t: 1, x: 104, y: 56 }],
-      d3: [{ t: 0, x: 22, y: 34 }, { t: 0.45, x: 36, y: 32 }, { t: 1, x: 58, y: 30 }],
-      d4: [{ t: 0, x: 128, y: 34 }, { t: 0.45, x: 126, y: 36 }, { t: 1, x: 132, y: 24 }],
-      d5: [{ t: 0, x: 75, y: 26 }, { t: 0.45, x: 83, y: 26 }, { t: 1, x: 97, y: 22 }],
-    },
-  },
-];
-
-/* ---------------- Interpolation ---------------- */
-
-function interpKF(kfs, t) {
-  if (t <= kfs[0].t) return kfs[0];
-  for (let i = 0; i < kfs.length - 1; i++) {
-    const a = kfs[i], b = kfs[i + 1];
-    if (t >= a.t && t <= b.t) {
-      const span = b.t - a.t || 1;
-      const u = (t - a.t) / span;
-      const s = u * u * (3 - 2 * u);
-      return { x: a.x + (b.x - a.x) * s, y: a.y + (b.y - a.y) * s };
-    }
-  }
-  return kfs[kfs.length - 1];
-}
-
-/* ---------------- Court ---------------- */
-
-function HalfLines() {
-  return (
-    <g stroke={CHALK} strokeWidth="0.9" fill="none" strokeLinecap="round">
-      {/* Zone */}
-      <rect x="50.5" y="0" width="49" height="58" fill="rgba(96,42,32,0.55)" />
-      {/* Freiwurfkreis */}
-      <circle cx="75" cy="58" r="18" />
-      {/* No-Charge-Halbkreis */}
-      <path d="M 62.5 15.75 A 12.5 12.5 0 0 0 87.5 15.75" />
-      {/* Brett + Ring */}
-      <line x1="66" y1="12" x2="84" y2="12" strokeWidth="1.4" />
-      <circle cx="75" cy={HOOP_Y} r="2.4" stroke="#F2994A" strokeWidth="1" />
-      {/* Dreierlinie */}
-      <path d="M 9 0 L 9 29.9 A 67.5 67.5 0 0 0 141 29.9 L 141 0" />
-    </g>
-  );
-}
-
-function Court({ courtType }) {
-  const H = courtType === "half" ? 140 : 280;
-  return (
-    <g>
-      <defs>
-        <linearGradient id="wood" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#C9905A" />
-          <stop offset="55%" stopColor="#BE8048" />
-          <stop offset="100%" stopColor="#B0703C" />
-        </linearGradient>
-      </defs>
-      <rect x="-8" y="-8" width="166" height={H + 16} fill="#8A5A30" rx="3" />
-      <rect x="0" y="0" width="150" height={H} fill="url(#wood)" />
-      {/* Parkett-Andeutung */}
-      {Array.from({ length: 11 }, (_, i) => (
-        <line key={i} x1={(i + 1) * 12.5} y1="0" x2={(i + 1) * 12.5} y2={H}
-          stroke="#000" strokeOpacity="0.05" strokeWidth="0.6" />
-      ))}
-      <rect x="0" y="0" width="150" height={H} fill="none" stroke={CHALK} strokeWidth="1.2" />
-      <HalfLines />
-      {courtType === "full" ? (
-        <>
-          <g transform="translate(0,280) scale(1,-1)"><HalfLines /></g>
-          <line x1="0" y1="140" x2="150" y2="140" stroke={CHALK} strokeWidth="0.9" />
-          <circle cx="75" cy="140" r="18" stroke={CHALK} strokeWidth="0.9" fill="none" />
-        </>
-      ) : (
-        <>
-          <line x1="0" y1="140" x2="150" y2="140" stroke={CHALK} strokeWidth="1.2" />
-          <path d="M 57 140 A 18 18 0 0 1 93 140" stroke={CHALK} strokeWidth="0.9" fill="none" />
-        </>
-      )}
-    </g>
-  );
-}
 
 /* ---------------- Tokens ---------------- */
 
@@ -282,8 +57,6 @@ export default function Taktikboard() {
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [showPaths, setShowPaths] = useState(true);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [ballOwnerId, setBallOwnerId] = useState(null); // "o1".."o5" / "d1".."d5" oder null
   const [recording, setRecording] = useState(false);
   const [hasRecording, setHasRecording] = useState(false);
@@ -303,14 +76,12 @@ export default function Taktikboard() {
   const snapRef = useRef(null);    // immer aktueller Board-State (für Aufnahme)
   const bufferRef = useRef([]);    // temporärer Aufnahme-Buffer
   const replayTimer = useRef(null);
-  const zoomRef = useRef(1);
-  const panRef = useRef({ x: 0, y: 0 });
-  const pointers = useRef(new Map());
-  const gesture = useRef({ active: false, lastDist: 0, lastMid: { x: 0, y: 0 }, W: 0, H: 0, left: 0, top: 0 });
 
-  const VB = courtType === "half"
-    ? { x: -8, y: -8, w: 166, h: 156 }
-    : { x: -8, y: -8, w: 166, h: 296 };
+  const { zoom, pan, resetZoom, isGesturing, handlers: zoomHandlers } = useZoomPan(viewportRef, {
+    onGestureStart: () => { dragId.current = null; stroke.current = null; },
+  });
+
+  const VB = viewBoxFor(courtType);
 
   // Maßstab der gezeichneten viewBox (preserveAspectRatio="xMidYMid meet"):
   // px pro Court-Einheit – berücksichtigt Letterboxing UND den Zoom-Transform.
@@ -431,62 +202,9 @@ export default function Taktikboard() {
     return positions[id];
   };
 
-  /* ----- Zoom & Pan (Zwei-Finger-Gesten) ----- */
-  const applyZoom = (s, p) => {
-    zoomRef.current = s; panRef.current = p;
-    setZoom(s); setPan(p);
-  };
-
-  const resetZoom = () => applyZoom(1, { x: 0, y: 0 });
-
-  const clampPan = (s, p, W, H) => ({
-    x: Math.min(0, Math.max(-(s - 1) * W, p.x)),
-    y: Math.min(0, Math.max(-(s - 1) * H, p.y)),
-  });
-
-  const onViewportPointerDown = (e) => {
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointers.current.size === 2) {
-      // Zweiter Finger: Ein-Finger-Interaktion abbrechen, Geste starten
-      dragId.current = null; stroke.current = null;
-      const r = viewportRef.current.getBoundingClientRect();
-      const [a, b] = [...pointers.current.values()];
-      gesture.current = {
-        active: true,
-        lastDist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
-        lastMid: { x: (a.x + b.x) / 2 - r.left, y: (a.y + b.y) / 2 - r.top },
-        W: r.width, H: r.height, left: r.left, top: r.top,
-      };
-    }
-  };
-
-  const onViewportPointerMove = (e) => {
-    if (!pointers.current.has(e.pointerId)) return;
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    const g = gesture.current;
-    if (!g.active || pointers.current.size < 2) return;
-    const [a, b] = [...pointers.current.values()];
-    const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
-    const mid = { x: (a.x + b.x) / 2 - g.left, y: (a.y + b.y) / 2 - g.top };
-    const sOld = zoomRef.current;
-    const sNew = Math.min(5, Math.max(1, sOld * (dist / g.lastDist)));
-    let t = {
-      x: mid.x - (sNew / sOld) * (g.lastMid.x - panRef.current.x),
-      y: mid.y - (sNew / sOld) * (g.lastMid.y - panRef.current.y),
-    };
-    t = clampPan(sNew, t, g.W, g.H);
-    g.lastDist = dist; g.lastMid = mid;
-    applyZoom(sNew, t);
-  };
-
-  const onViewportPointerUp = (e) => {
-    pointers.current.delete(e.pointerId);
-    if (pointers.current.size < 2) gesture.current.active = false;
-  };
-
   /* ----- Pointer handling ----- */
   const onTokenDown = (e, id) => {
-    if (mode !== "move" || gesture.current.active || replaying) return;
+    if (mode !== "move" || isGesturing() || replaying) return;
     if (progress > 0) { setProgress(0); setPlaying(false); }
     if (id === "ball" && ballOwnerId) {
       // Ball löst sich vom Träger – an aktueller (Schulter-)Position weiterziehen
@@ -502,7 +220,7 @@ export default function Taktikboard() {
   };
 
   const onSvgDown = (e) => {
-    if (mode === "move" || gesture.current.active || replaying) return;
+    if (mode === "move" || isGesturing() || replaying) return;
     const p = toCourt(e);
     stroke.current = mode === "pen"
       ? { type: "pen", points: [p] }
@@ -512,11 +230,11 @@ export default function Taktikboard() {
   };
 
   const onSvgMove = (e) => {
-    if (gesture.current.active || replaying) return;
+    if (isGesturing() || replaying) return;
     if (dragId.current) {
       const p = toCourt(e);
       const id = dragId.current;
-      const maxY = courtType === "half" ? 140 : 280;
+      const maxY = courtHeight(courtType);
       const np = { x: Math.max(0, Math.min(150, p.x)), y: Math.max(0, Math.min(maxY, p.y)) };
       if (id === "ball") ballPosRef.current = np;
       setPositions((pos) => ({ ...pos, [id]: np }));
@@ -602,18 +320,6 @@ export default function Taktikboard() {
   };
 
   /* ----- UI-Hilfen ----- */
-  const Btn = ({ active, onClick, children, tone }) => (
-    <button onClick={onClick} style={{
-      padding: "7px 12px", borderRadius: 8, fontSize: 13, fontWeight: 700,
-      letterSpacing: "0.02em", whiteSpace: "nowrap",
-      fontFamily: "inherit", cursor: "pointer",
-      border: `1px solid ${active ? (tone || OFF_COLOR) : "#39424B"}`,
-      background: active ? (tone || OFF_COLOR) : "#232B32",
-      color: active ? "#16110C" : "#D9D4C8",
-      transition: "background 0.15s, color 0.15s",
-    }}>{children}</button>
-  );
-
   const entityColor = (id) => (id === "ball" ? BALL_COLOR : id.startsWith("d") ? DEF_COLOR : OFF_COLOR);
 
   return (
@@ -682,8 +388,7 @@ export default function Taktikboard() {
 
       {/* ===== Court (flexibel, füllt verfügbaren Platz) ===== */}
       <div ref={viewportRef}
-        onPointerDown={onViewportPointerDown} onPointerMove={onViewportPointerMove}
-        onPointerUp={onViewportPointerUp} onPointerCancel={onViewportPointerUp}
+        {...zoomHandlers}
         style={{
           flex: 1, minHeight: 0, position: "relative", overflow: "hidden",
           touchAction: "none", padding: "6px 10px",
