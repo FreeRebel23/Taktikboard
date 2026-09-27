@@ -32,7 +32,8 @@ const TRAIL_STEPS = 8;
 const TRAIL_DT = 0.07;
 
 export const TRAP_RADIUS = 11;
-const LANE_IGNORE_RADIUS = 12;       // Einheiten um die Passgeberin
+const LANE_NEAR_RADIUS = 12;         // Verteidigerinnen direkt an der Passgeberin (Trap, On-Ball)
+const LANE_REACH = 8;                // Armreichweite einer nahen Verteidigerin (Einheiten)
 const LANE_MAX_LENGTH = 100;         // > 10 m gegen Presse: riskanter langer Pass
 const HAND_RADIUS = 5.2;
 
@@ -95,6 +96,7 @@ export function compilePlay(play) {
       toIdx: l.toBeat != null ? beatIndexById(play, l.toBeat) : Infinity,
     };
   });
+  C.warnings = [...warnings, ...checkPasses(C)];
   return C;
 }
 
@@ -346,6 +348,65 @@ function makeSampler(C) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Passwege                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Passlinien von der Ballführerin zu allen Mitspielerinnen.
+ * status: "open"   – direkter Pass möglich
+ *         "lob"    – nur über die Hände nahe stehender Verteidigerinnen (blockedBy), dahinter frei
+ *         "closed" – Verteidigerin in der Linie oder Empfängerin eng gedeckt
+ *         "long"   – über 10 m gegen Presse: riskant
+ * Verteidigerinnen direkt an der Passgeberin werden NICHT ausgeblendet: Reichen ihre
+ * Hände (LANE_REACH) an die Passlinie, ist der direkte Pass zu – ist die Linie dahinter
+ * frei, bleibt nur der Pass über die Hände. Eine freie Linie entsteht nie dadurch, dass
+ * Verteidigerinnen aus der Prüfung ausgeschlossen werden. Gilt für jeden Pass, nicht nur
+ * für modellierte Lobs.
+ */
+export function passLanes(C, players, holder) {
+  const team = C.entity[holder].team;
+  const hp = players[holder];
+  const opp = C.ids.filter((id) => C.entity[id].team !== team).map((id) => players[id]);
+  const near = opp.filter((o) => dist(o, hp) <= LANE_NEAR_RADIUS);
+  const far = opp.filter((o) => dist(o, hp) > LANE_NEAR_RADIUS);
+  const lanes = [];
+  for (const id of C.ids) {
+    if (id === holder || C.entity[id].team !== team) continue;
+    const mp = players[id];
+    const length = dist(hp, mp);
+    // Hände erreichen die Passlinie, wenn sie senkrecht näher als die Armreichweite ist.
+    // Zwei Trapperinnen schließen so auch die Lücke zwischen sich ("Split").
+    const blockedBy = near.filter((o) => distToSegment(o, hp, mp) < LANE_REACH).map((o) => o.id);
+    const clearance = far.length ? Math.min(...far.map((o) => distToSegment(o, hp, mp))) : Infinity;
+    const marked = opp.length ? Math.min(...opp.map((o) => dist(o, mp))) : Infinity;
+    let status;
+    if (clearance <= 8 || marked <= 10) status = "closed";
+    else if (length > LANE_MAX_LENGTH) status = "long";
+    else if (blockedBy.length) status = "lob";
+    else status = "open";
+    lanes.push({ from: holder, to: id, clearance, marked, length, blockedBy, status, open: status === "open" });
+  }
+  return lanes;
+}
+
+/** Prüft jeden modellierten Pass gegen die Passlinie beim Abspiel. */
+function checkPasses(C) {
+  const out = [];
+  for (const b of C.beats) {
+    for (const p of b.passes) {
+      const t = b.t0 + actionWindow(p).start * b.dur;
+      const f = sampleFrame(C, t);
+      const lane = passLanes(C, f.players, p.from).find((l) => l.to === p.to);
+      if (!lane) continue;
+      const where = `Beat ${b.index + 1} (${b.beat.title ?? b.beat.id})`;
+      if (lane.status === "lob" && !p.lob) out.push(`${where}: Pass ${p.from}→${p.to} geht direkt durch die Arme von ${lane.blockedBy.join(", ")} – nur als Lob möglich (lob: true)`);
+      if (lane.status === "closed") out.push(`${where}: Pass ${p.from}→${p.to} durch eine geschlossene Passlinie`);
+    }
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
 /* Frame                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -441,25 +502,7 @@ export function sampleFrame(C, t) {
   }
 
   /* ---- Passwege ---- */
-  const lanes = [];
-  if (beat.showLanes && ph.state === "held") {
-    const holder = ph.holder;
-    const team = C.entity[holder].team;
-    const hp = players[holder];
-    const opp = C.ids.filter((id) => C.entity[id].team !== team).map((id) => players[id]);
-    // Verteidigerinnen direkt an der Passgeberin (Trap, On-Ball) werden über-/umspielt –
-    // entscheidend ist, ob die Passlinie dahinter frei ist.
-    const lineDefs = opp.filter((o) => dist(o, hp) > LANE_IGNORE_RADIUS);
-    for (const id of C.ids) {
-      if (id === holder || C.entity[id].team !== team) continue;
-      const mp = players[id];
-      const length = dist(hp, mp);
-      const clearance = lineDefs.length ? Math.min(...lineDefs.map((o) => distToSegment(o, hp, mp))) : Infinity;
-      const marked = Math.min(...opp.map((o) => dist(o, mp)));
-      const status = clearance <= 8 || marked <= 10 ? "closed" : length > LANE_MAX_LENGTH ? "long" : "open";
-      lanes.push({ from: holder, to: id, clearance, marked, length, status, open: status === "open" });
-    }
-  }
+  const lanes = beat.showLanes && ph.state === "held" ? passLanes(C, players, ph.holder) : [];
 
   /* ---- Linien (z. B. 1. Presslinie) ---- */
   const lines = C.lines

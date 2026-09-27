@@ -114,12 +114,22 @@ test("Deny: X3 steht in der Passlinie zum Rückpass", () => {
   assert.ok(distToSegment(f.players.d3, f.players.o1, f.players.o4) < 4);
 });
 
-test("Passwege: 5 ist frei, 2 und 4 sind zu", () => {
+test("Passwege: 5 ist nur per Lob über den Trap erreichbar, 2 und 4 sind zu", () => {
   const f = sampleFrame(C, endOf("second_row") - 0.01);
   const lane = (id) => f.lanes.find((l) => l.to === id);
-  assert.equal(lane("o5").status, "open");
+  // Die Trapperinnen stehen in der Passrichtung – der direkte Pass ist NICHT frei
+  assert.equal(lane("o5").status, "lob");
+  assert.ok(lane("o5").blockedBy.includes("d1"));
+  assert.notEqual(lane("o5").status, "open");
   assert.equal(lane("o2").status, "closed");
   assert.equal(lane("o4").status, "closed");
+  // …und der modellierte Pass aus dem Trap ist deshalb ein Lob
+  const outlet = pressBreak.beats.find((b) => b.id === "outlet").actions.find((a) => a.type === "pass");
+  assert.equal(outlet.lob, true);
+});
+
+test("jeder modellierte Pass passt zur Passlinie beim Abspiel (keine Warnungen)", () => {
+  assert.deepEqual(C.warnings, []);
 });
 
 test("1. Presslinie wird erst durch den Pass aus dem Trap überwunden", () => {

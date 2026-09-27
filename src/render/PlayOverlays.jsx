@@ -45,7 +45,7 @@ export function TrapOverlay({ trap }) {
   );
 }
 
-/** Passwege von der Ballführerin: frei (grün), zu (rot), weit/riskant (grau) */
+/** Passwege von der Ballführerin: frei (grün), nur per Lob (gelb, Bogen), zu (rot), weit/riskant (grau) */
 export function LaneOverlay({ lanes, players }) {
   return (
     <g pointerEvents="none">
@@ -54,6 +54,7 @@ export function LaneOverlay({ lanes, players }) {
         const style = {
           open: { stroke: OPEN_COLOR, width: 1.4, dash: "3 1.8", op: 0.95 },
           closed: { stroke: TRAP_COLOR, width: 0.8, dash: "1 2", op: 0.55 },
+          lob: { stroke: "#FFD166", width: 1.1, dash: "2.4 1.8", op: 0.9 },
           long: { stroke: CHALK, width: 0.7, dash: "0.8 2.4", op: 0.4 },
         }[l.status];
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
@@ -61,6 +62,11 @@ export function LaneOverlay({ lanes, players }) {
           <g key={l.to}>
             <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={style.stroke} strokeWidth={style.width}
               strokeDasharray={style.dash} opacity={style.op} strokeLinecap="round" />
+            {l.status === "lob" && (
+              // Bogen-Symbol: nur über die Hände spielbar
+              <path d={`M ${mx - 3} ${my + 1} Q ${mx} ${my - 3.5} ${mx + 3} ${my + 1}`}
+                fill="none" stroke="#FFD166" strokeWidth="1" opacity="0.95" />
+            )}
             {l.status === "closed" && (
               <path d={`M ${mx - 1.6} ${my - 1.6} L ${mx + 1.6} ${my + 1.6} M ${mx + 1.6} ${my - 1.6} L ${mx - 1.6} ${my + 1.6}`}
                 stroke={TRAP_COLOR} strokeWidth="0.9" opacity="0.75" />

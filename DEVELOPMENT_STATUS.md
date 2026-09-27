@@ -9,7 +9,7 @@ Stand: Full-Court-Press-Break als vertikaler Prototyp der neuen Generation
 - Eine **deterministische Engine** wertet ein Play zu jedem Zeitpunkt aus. Abspielen, Schritt-Navigation und Scrubbing nutzen denselben Codepfad.
 - **Beziehungen statt Koordinaten**: Guard-, Deny-, Help- und Trap-Positionen berechnet die Engine aus Gegenspielerin, Ball und Korb.
 - **2,5D-Figuren** (SVG) zeigen Körper- und Blickrichtung, Bewegung, Team, Ballbesitz und defensive Haltung. Der Ball hat eine Flughöhe.
-- **Taktik-Ebenen**: Trap-Keil, Passwege (frei/zu/riskant), 1. Presslinie (überwunden ja/nein), Matchups, „FREI“-Markierung, Coaching-Hinweise, Laufweg-Notation.
+- **Taktik-Ebenen**: Trap-Keil, Passwege (frei / nur per Lob / zu / riskant), 1. Presslinie (überwunden ja/nein), Matchups, „FREI“-Markierung, Coaching-Hinweise, Laufweg-Notation.
 - Freimodus, Legacy-Presets, Zeichnen, Zoom/Pan, REC und PWA/Offline funktionieren weiter.
 
 ## Aktuelle Architektur
@@ -104,13 +104,38 @@ Beat-Grenzen: Intervalle `(t0, t1]`. An einer Grenze sieht man den **Zustand nac
 | closeout | ⏳ geplant | registriert, noch Hold |
 | handoff | ⏳ geplant | registriert, noch ohne Wirkung |
 
-Automatisch abgeleitet: Ballphase (gehalten/Flug/Dribbling), Körper- und Blickrichtung, Passwege mit Status, Trap-Stärke, Presslinie überwunden, Matchups (wer verteidigt wen, On-Ball hervorgehoben).
+Automatisch abgeleitet: Ballphase (gehalten/Flug/Dribbling), Körper- und Blickrichtung, Passwege mit Status (siehe unten), Trap-Stärke, Presslinie überwunden, Matchups (wer verteidigt wen, On-Ball hervorgehoben).
+
+## Passlinien-Analyse (Review-Befund und Korrektur)
+
+**Befund:** Die erste Version ignorierte **allgemein** jede Verteidigerin, die näher als 1,2 m an der Passgeberin stand. Das betraf alle Passlinien und nicht nur Trapperinnen. Es war unabhängig davon, ob überhaupt ein Lob modelliert war, weil die Analyse keinen Bezug zum Passtyp hatte. Folge: Eine Verteidigerin direkt in der Passrichtung, auch ohne Trap, erzeugte eine „freie“ Linie. Das ist eine freie Linie allein durch Ausschluss.
+
+**Neue Regel** (`passLanes` in `src/play/engine.js`, gilt für jeden Pass):
+
+| Status | Bedeutung | Bedingung |
+|---|---|---|
+| `closed` | zu | Verteidigerin (> 1,2 m von der Passgeberin) < 0,8 m an der Linie **oder** Empfängerin < 1 m gedeckt |
+| `long` | riskant | Passweg > 10 m (gegen Presse) |
+| `lob` | nur über die Hände | eine Verteidigerin ≤ 1,2 m an der Passgeberin erreicht mit den Händen (0,8 m) die Linie, dahinter ist alles frei (`blockedBy` nennt sie) |
+| `open` | direkter Pass möglich | nichts davon |
+
+Nahe Verteidigerinnen werden also nie ausgeblendet, sondern über ihre Armreichweite geprüft. Gemessen wird der senkrechte Abstand zur Linie. Zwei Trapperinnen schließen damit auch die Lücke zwischen sich. Ein reines Winkelmodell hätte dort eine falsche Lücke gelassen, das hat ein Test aufgedeckt.
+
+**Konsistenzprüfung:** `compilePlay` prüft jeden modellierten Pass zum Abspielzeitpunkt gegen die Passlinie. Ein direkter Pass durch eine `lob`-Linie oder ein Pass durch eine `closed`-Linie ergibt eine Warnung. Diese Prüfung fand zwei echte Fehler im Press Break, die die alte Regel verdeckt hatte:
+- **Einwurf 4→1:** X1 stand beim Abspiel fast in der Passlinie, der V-Cut schaffte keine Trennung. Korrigiert: X1 bleibt beim Richtungswechsel hängen. Außerdem deckt X4 mit hohen Armen die direkte Linie ab, der Einwurf ist jetzt ein Überkopfpass (`lob: true`).
+- **Pass 5→2:** X2 stand 0,9 m vor 5, direkt an der Passlinie. Korrigiert: X2 sinkt tiefer ab (1,3 m), um die Mitte zu schließen.
+
+Im Trap zeigt die Linie zu 5 jetzt `lob` (blockiert durch X1) und nicht `open`. Das passt zum modellierten Lob aus dem Trap.
+
+**Tests:** Verteidigerin direkt vor der Passgeberin ohne Trap → `lob` statt `open` (Regression). Seitlich stehende nahe Verteidigerin → `open`. Nahe plus weitere Verteidigerin in der Linie → `closed`. Trapperinnen zählen bei jedem Pass (Split-Lücke geschlossen). Warnung bei direktem Pass durch die Arme, keine Warnung als Lob. Press Break: 5 nur per Lob, alle modellierten Pässe ohne Warnung.
+
+Grenzen der Heuristik: Pivot bzw. Sternschritt der Passgeberin (Winkel verändern), Bodenpass und Passgeschwindigkeit sind nicht modelliert. `lob` heißt „nicht direkt spielbar“ und ist keine Erfolgsgarantie für den Lob.
 
 ## Referenzfall: Press Break (6 Beats, ~11,6 s)
 
-1. **Einwurf** – 1 V-Cut gegen den Deny von X1, Einwurf von 4, X4 mit hohen Armen.
+1. **Einwurf** – 1 V-Cut gegen den Deny von X1, X4 mit hohen Armen, 4 wirft über Kopf ein.
 2. **Ballannahme** – 1 dreht auf, Blick nach vorne; 4 kommt ins Feld.
-3. **Trap** – X4 verlässt die Einwerferin, doppelt mit X1 an der Seitenlinie. „KEIN DRIBBLING“. X3 nimmt den Rückpass weg → Mitte leer, 5 „FREI“. Passwege: 2 und 4 zu, 5 frei, 3 zu weit.
+3. **Trap** – X4 verlässt die Einwerferin, doppelt mit X1 an der Seitenlinie. „KEIN DRIBBLING“. X3 nimmt den Rückpass weg → Mitte leer, 5 „FREI“ (ungedeckt). Passwege: 2 und 4 zu, 5 nur per Lob über den Trap, 3 zu weit.
 4. **Zweite Reihe** – 5 cuttet in den freien Passraum hinter dem Trap.
 5. **Pass aus dem Trap** – Lob 1 → 5. Die 1. Presslinie wird im Flug als „überwunden“ markiert. X2 muss die Mitte stoppen.
 6. **Presslinie überwunden** – 5 dreht auf, Pass nach vorne zu 2. Drei Pässe, kein Dribbling.
@@ -118,10 +143,10 @@ Automatisch abgeleitet: Ballphase (gehalten/Flug/Dribbling), Körper- und Blickr
 ## Was getestet wurde
 
 - **Build:** `npm run build` erfolgreich, PWA-Service-Worker wird erzeugt.
-- **Unit-/Szenario-Tests:** `npm test` mit 37 Tests (node:test, keine neue Dependency). Abgedeckt:
+- **Unit-/Szenario-Tests:** `npm test` mit 43 Tests (node:test, keine neue Dependency). Abgedeckt:
   - Validierung: unbekannte Aktion/Spielerin, überlappende Aktionen, Pass ohne Ball, Dribbling ohne Ball, Trap-Regeln, Warnung bei geplanten Aktionen.
   - Bewegungsprofile: monoton, stetig, Beschleunigen/Abbremsen; Ball nahezu gleichförmig; Sprint schneller als Move.
-  - Engine: Gleichzeitigkeit, keine Positionssprünge (60-fps-Abtastung über das ganze Play), Stetigkeit an Beat-Grenzen, Guard auf der Korbseite, Trap-Geometrie und Trap-Ende nach dem Pass, Deny in der Passlinie, Passwege-Status, Presslinie erst nach dem Pass überwunden, Ballbesitz 4 → 1 → 5 → 2, Lob schneller als jede Spielerin, Ausrichtung, Determinismus beim Scrubbing.
+  - Engine: Gleichzeitigkeit, keine Positionssprünge (60-fps-Abtastung über das ganze Play), Stetigkeit an Beat-Grenzen, Guard auf der Korbseite, Trap-Geometrie und Trap-Ende nach dem Pass, Deny in der Passlinie, Passwege-Status inkl. nahe Verteidigerinnen und Konsistenz der modellierten Pässe, Presslinie erst nach dem Pass überwunden, Ballbesitz 4 → 1 → 5 → 2, Lob schneller als jede Spielerin, Ausrichtung, Determinismus beim Scrubbing.
 - **Browser (Playwright/Chromium, Handy 430×932 hochkant und Tablet 1180×820 quer):** Play laden, Schritt vor/zurück, Beat-Chips, kompletter Ablauf bis Beat 6, Scrubbing, Leertaste, Tempo, Verteidigung ausblenden, Zeichnen im Play, Play schließen. Regressionen: Drag im Freimodus (auch im gedrehten Ganzfeld), Legacy-Preset abspielen, REC → Replay. Keine JS-Fehler.
 - **Offline:** Nach dem ersten Laden die Seite offline neu geladen: Press Break lädt und spielt.
 - **Performance:** `sampleFrame` braucht ca. 0,4 ms pro Frame (Node, Desktop).
@@ -133,7 +158,7 @@ Nicht getestet: echte iOS-/Android-Geräte (Touch-Gesten nur über Chromium-Emul
 - **Handy hochkant:** Das Ganzfeld ist breitenbegrenzt, die Figuren sind klein. Die Trap-Gruppe ist eng, Pinch-Zoom hilft. Eine automatische Kamera, die auf die Aktion zoomt, fehlt noch.
 - **Keine Kollisionsvermeidung:** Enge Abstände (Deny/Guard ~0,8–0,9 m) sind gewollt. Bei ungünstigem Authoring können sich Figuren kurz überlappen.
 - **Trap-Slots** sind auf „Ballführerin an der Seitenlinie, Angriff nach vorne“ optimiert. Für Mitte, Grundlinie und Halbfeld-Traps braucht es Varianten.
-- **Passwege-Analyse** ist eine Heuristik (Abstand der Verteidigerinnen zur Passlinie, Mindestabstand zur Empfängerin, Länge). Verteidigerinnen direkt an der Passgeberin werden ignoriert, weil der Pass über oder neben sie geht.
+- **Passwege-Analyse** ist eine Heuristik (Hände an der Linie, Deckung der Empfängerin, Länge; siehe „Passlinien-Analyse“). Pivot, Bodenpass und Passgeschwindigkeit fehlen.
 - **Presslinie** wird einmalig am Ende des Anker-Beats gemessen (statische Linie), nicht dynamisch mitgeführt.
 - **Blickrichtung Defense** ohne Beziehungsaktion: schaut zum Ball. Ein echtes „Ball-You-Prinzip“ fehlt.
 - **Kein Play-Builder:** Plays werden als Daten in `src/play/plays/` geschrieben.

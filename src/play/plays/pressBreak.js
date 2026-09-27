@@ -53,14 +53,16 @@ export const pressBreak = {
     {
       id: "inbound",
       title: "Einwurf",
-      text: "4 wirft ein. 1 löst sich mit einem V-Cut von X1 und bekommt den Ball an der rechten Seite. X4 verteidigt den Einwurf mit hohen Armen.",
+      text: "4 wirft ein. 1 löst sich mit einem V-Cut von X1 und bekommt den Ball an der rechten Seite. X4 verteidigt den Einwurf mit hohen Armen – 4 spielt über Kopf.",
       duration: 2200,
       actions: [
         { type: "cut", player: "o1", via: [{ x: 94, y: 222 }], to: { x: 122, y: 244 }, end: 0.5 },
-        { type: "deny", player: "d1", target: "o1", end: 0.4 },
-        { type: "guard", player: "d1", target: "o1", start: 0.4, distance: 7.5 },
+        // X1 geht mit dem ersten Schritt des V-Cuts mit, bleibt beim Richtungswechsel hängen
+        { type: "deny", player: "d1", target: "o1", end: 0.3 },
+        { type: "hold", player: "d1", start: 0.3, end: 0.55 },
+        { type: "guard", player: "d1", target: "o1", start: 0.55, distance: 7.5, profile: "sprint" },
         { type: "guard", player: "d4", target: "o4", distance: 8 },
-        { type: "pass", from: "o4", to: "o1", start: 0.52, end: 0.8 },
+        { type: "pass", from: "o4", to: "o1", start: 0.52, end: 0.8, lob: true }, // Überkopf über die Arme von X4
         { type: "deny", player: "d2", target: "o2" },
         { type: "hold", player: "o2" },
         { type: "hold", player: "o5" },
@@ -135,7 +137,7 @@ export const pressBreak = {
     {
       id: "outlet",
       title: "Pass aus dem Trap",
-      text: "1 passt über die Hände der Trapperinnen zu 5. Mit einem Pass stehen zwei Verteidigerinnen hinter dem Ball. X2 muss die Mitte stoppen und verlässt dafür 2.",
+      text: "1 passt über die Hände der Trapperinnen zu 5. Mit einem Pass stehen zwei Verteidigerinnen hinter dem Ball. X2 sinkt ab, um die Mitte zu schließen, und verlässt dafür 2.",
       duration: 1700,
       focus: [{ type: "open", player: "o5", label: "FREI", to: 0.5 }],
       actions: [
@@ -146,7 +148,7 @@ export const pressBreak = {
         { type: "hold", player: "o1" },
         { type: "hold", player: "o5" },
         { type: "sprint", player: "d3", to: { x: 86, y: 236 }, start: 0.35 },
-        { type: "help", player: "d2", target: "o5", start: 0.3, ratio: 0, drop: 7 },
+        { type: "help", player: "d2", target: "o5", start: 0.3, ratio: 0, drop: 13 },
         { type: "hold", player: "o2" },
         { type: "hold", player: "o4" },
         { type: "hold", player: "o3" },
