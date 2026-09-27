@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import Court, { viewBoxFor } from "./court/Court.jsx";
-import { OFF_COLOR, DEF_COLOR, BALL_COLOR, REC_COLOR, CHALK, OFF, DEF, courtHeight } from "./court/constants.js";
+import { OFF_COLOR, DEF_COLOR, BALL_COLOR, REC_COLOR, CHALK, OPEN_COLOR, OFF, DEF, courtHeight } from "./court/constants.js";
 import { PRESETS, DEFAULT_HALF, DEFAULT_FULL, interpKF } from "./legacy/presets.js";
 import { FRAME_MS, clone, loadSeqs, persistSeqs } from "./legacy/recordingStore.js";
 import useZoomPan from "./hooks/useZoomPan.js";
@@ -8,6 +8,11 @@ import Btn from "./ui/Btn.jsx";
 import Player25D, { PlayerDefs } from "./render/Player25D.jsx";
 import Ball25D, { BallDefs } from "./render/Ball25D.jsx";
 import { boardPlayers } from "./render/boardView.js";
+import { ViewContext, PORTRAIT, LANDSCAPE, LANDSCAPE_MATRIX } from "./render/view.js";
+import PlayScene from "./render/PlayScene.jsx";
+import PlayControls from "./ui/PlayControls.jsx";
+import usePlayback from "./hooks/usePlayback.js";
+import { PLAYS, compilePlay, sampleFrame, beatDiagram, beatBoundaries } from "./play/index.js";
 
 /* ============================================================
    TAKTIKBOARD – Basketball Coach Board
@@ -38,6 +43,7 @@ export default function Taktikboard() {
   const [saveName, setSaveName] = useState("");
   const [sequences, setSequences] = useState(loadSeqs);
   const [activeSeqId, setActiveSeqId] = useState(null);
+  const [activePlayId, setActivePlayId] = useState(null); // aktionsbasiertes Play (neu)
 
   const svgRef = useRef(null);
   const viewportRef = useRef(null);
@@ -54,7 +60,29 @@ export default function Taktikboard() {
     onGestureStart: () => { dragId.current = null; stroke.current = null; },
   });
 
-  const VB = viewBoxFor(courtType);
+  // Ganzfeld auf breiten Bildschirmen (Tablet quer, Desktop) quer darstellen
+  const [viewportAspect, setViewportAspect] = useState(1);
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => {
+      const { width, height } = e.contentRect;
+      if (height > 0) setViewportAspect(width / height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const landscape = courtType === "full" && viewportAspect > 1.15;
+  const view = landscape ? LANDSCAPE : PORTRAIT;
+
+  const VB = viewBoxFor(courtType, landscape);
+
+  /* ----- Aktionsbasierte Plays ----- */
+  const activePlay = PLAYS.find((p) => p.id === activePlayId) ?? null;
+  const compiled = useMemo(() => (activePlay ? compilePlay(activePlay) : null), [activePlay]);
+  const playback = usePlayback(compiled?.total ?? 0);
+  const frame = compiled ? sampleFrame(compiled, playback.time) : null;
+  const diagram = compiled && showPaths ? beatDiagram(compiled, frame.beatIndex) : null;
 
   // Maßstab der gezeichneten viewBox (preserveAspectRatio="xMidYMid meet"):
   // px pro Court-Einheit – berücksichtigt Letterboxing UND den Zoom-Transform.
@@ -65,8 +93,9 @@ export default function Taktikboard() {
     const s = Math.min(r.width / VB.w, r.height / VB.h);
     const offX = r.left + (r.width - VB.w * s) / 2;
     const offY = r.top + (r.height - VB.h * s) / 2;
-    return { x: (e.clientX - offX) / s + VB.x, y: (e.clientY - offY) / s + VB.y };
-  }, [VB.w, VB.h, VB.x, VB.y]);
+    const sx = (e.clientX - offX) / s + VB.x, sy = (e.clientY - offY) / s + VB.y;
+    return landscape ? { x: 150 - sy, y: sx } : { x: sx, y: sy };
+  }, [VB.w, VB.h, VB.x, VB.y, landscape]);
 
   /* ----- Animation loop ----- */
   useEffect(() => {
@@ -128,6 +157,7 @@ export default function Taktikboard() {
   };
 
   const startRec = () => {
+    leavePlay();
     stopReplay();
     setPlaying(false);
     bufferRef.current = [];
@@ -152,6 +182,7 @@ export default function Taktikboard() {
   };
 
   const playSequence = (seq) => {
+    leavePlay();
     if (recording) stopRec();
     setActiveSeqId(seq.id);
     resetZoom();
@@ -241,7 +272,20 @@ export default function Taktikboard() {
   };
 
   /* ----- Aktionen ----- */
+  const leavePlay = () => { playback.pause(); setActivePlayId(null); };
+
+  const selectPlay = (p) => {
+    if (recording) stopRec();
+    stopReplay(); setActiveSeqId(null);
+    setPreset(null); setProgress(0); setPlaying(false);
+    setDrawings([]); resetZoom(); setMode("move");
+    setCourtType(p.court); setShowDef(true);
+    setActivePlayId(p.id);
+    playback.seek(0);
+  };
+
   const applyPreset = (p) => {
+    leavePlay();
     const base = p.court === "half" ? DEFAULT_HALF : DEFAULT_FULL;
     setCourtType(p.court);
     setPositions({ ...base, ...p.pos });
@@ -256,7 +300,8 @@ export default function Taktikboard() {
   };
 
   const switchCourt = (t) => {
-    if (t === courtType) return;
+    if (t === courtType && !activePlay) return;
+    leavePlay();
     setCourtType(t);
     setPositions(t === "half" ? DEFAULT_HALF : DEFAULT_FULL);
     setPreset(null); setProgress(0); setPlaying(false); setDrawings([]);
@@ -266,6 +311,7 @@ export default function Taktikboard() {
   };
 
   const resetBoard = () => {
+    leavePlay();
     setPositions(courtType === "half" ? DEFAULT_HALF : DEFAULT_FULL);
     setPreset(null); setProgress(0); setPlaying(false); setDrawings([]);
     resetZoom();
@@ -294,6 +340,21 @@ export default function Taktikboard() {
 
   /* ----- UI-Hilfen ----- */
   const entityColor = (id) => (id === "ball" ? BALL_COLOR : id.startsWith("d") ? DEF_COLOR : OFF_COLOR);
+
+  // Tastatur (Tablet mit Tastatur / Desktop): Leertaste, Pfeile
+  const keyRef = useRef(null);
+  keyRef.current = (e) => {
+    if (!compiled || e.target.closest?.("input, textarea")) return;
+    const bounds = beatBoundaries(compiled);
+    if (e.key === " ") { e.preventDefault(); playback.toggle(); }
+    else if (e.key === "ArrowRight") { const t = bounds.find((b) => b > playback.time + 0.02); if (t != null) playback.playTo(t); }
+    else if (e.key === "ArrowLeft") playback.seek([...bounds].reverse().find((b) => b < playback.time - 0.05) ?? 0);
+  };
+  useEffect(() => {
+    const h = (e) => keyRef.current(e);
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
 
   return (
     <div style={{
@@ -332,6 +393,12 @@ export default function Taktikboard() {
 
         {/* Spielzüge + gespeicherte Aufnahmen */}
         <div style={{ display: "flex", gap: 6, overflowX: "auto" }}>
+          {PLAYS.map((p) => (
+            <Btn key={p.id} active={activePlayId === p.id} onClick={() => selectPlay(p)} tone={OPEN_COLOR}
+              title={`${p.name} (aktionsbasiert)`}>
+              ★ {p.name}
+            </Btn>
+          ))}
           {PRESETS.map((p) => (
             <Btn key={p.id} active={preset?.id === p.id} onClick={() => applyPreset(p)}
               tone={p.id === "zone23" ? DEF_COLOR : OFF_COLOR}>
@@ -354,6 +421,17 @@ export default function Taktikboard() {
           ))}
         </div>
 
+        {frame && (
+          <p aria-live="polite" style={{
+            margin: "8px 2px 0", fontSize: 13, lineHeight: 1.4, color: "#B9C2C9", minHeight: "2.8em",
+            display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden",
+          }}>
+            <strong style={{ color: OFF_COLOR, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+              Beat {frame.beatIndex + 1}/{compiled.beats.length} · {frame.beat.title}
+            </strong>{" "}
+            {frame.beat.text}
+          </p>
+        )}
         {preset && (
           <p style={{
             margin: "8px 2px 0", fontSize: 13, lineHeight: 1.4, color: "#B9C2C9",
@@ -393,8 +471,13 @@ export default function Taktikboard() {
             <BallDefs />
           </defs>
 
+          <ViewContext.Provider value={view}>
+          <g transform={landscape ? LANDSCAPE_MATRIX : undefined}>
           <Court courtType={courtType} />
 
+          {frame ? (
+            <PlayScene frame={frame} diagram={diagram} showDef={showDef} />
+          ) : (<>
           {/* Preset-Formen (z. B. Triangle) */}
           {preset?.shapes?.map((s, i) => (
             <polygon key={i} points={s.points.map((p) => p.join(",")).join(" ")}
@@ -411,19 +494,6 @@ export default function Taktikboard() {
               opacity="0.5" markerEnd="url(#arrow)" />
           ))}
 
-          {/* Zeichnungen */}
-          {drawings.map((d, i) =>
-            d.type === "pen" ? (
-              <polyline key={i} points={d.points.map((p) => `${p.x},${p.y}`).join(" ")}
-                fill="none" stroke={CHALK} strokeWidth="1.4" strokeLinecap="round"
-                strokeLinejoin="round" opacity="0.92" />
-            ) : (
-              <line key={i} x1={d.x1} y1={d.y1} x2={d.x2} y2={d.y2}
-                stroke={CHALK} strokeWidth="1.4" strokeLinecap="round"
-                opacity="0.92" markerEnd="url(#arrow)" />
-            )
-          )}
-
           {/* Spielerinnen (2,5D) */}
           {boardPlayers({
             ids: showDef ? [...DEF, ...OFF] : OFF,
@@ -437,6 +507,24 @@ export default function Taktikboard() {
           ))}
           <Ball25D ball={{ ...displayPos("ball"), z: ballOwnerId && !(preset?.anim && progress > 0) ? 3.5 : 0 }}
             onDown={onTokenDown} interactive={mode === "move"} />
+          </>)}
+
+          {/* Zeichnungen (über den Figuren, aber ohne Pointer-Events) */}
+          <g pointerEvents="none">
+          {drawings.map((d, i) =>
+            d.type === "pen" ? (
+              <polyline key={i} points={d.points.map((p) => `${p.x},${p.y}`).join(" ")}
+                fill="none" stroke={CHALK} strokeWidth="1.4" strokeLinecap="round"
+                strokeLinejoin="round" opacity="0.92" />
+            ) : (
+              <line key={i} x1={d.x1} y1={d.y1} x2={d.x2} y2={d.y2}
+                stroke={CHALK} strokeWidth="1.4" strokeLinecap="round"
+                opacity="0.92" markerEnd="url(#arrow)" />
+            )
+          )}
+          </g>
+          </g>
+          </ViewContext.Provider>
         </svg>
         </div>
 
@@ -456,7 +544,13 @@ export default function Taktikboard() {
         flexShrink: 0, borderTop: "1px solid #232B32", background: "#171C21",
         padding: "10px calc(12px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left))",
       }}>
-        {/* Abspielen */}
+        {/* Aktionsbasiertes Play */}
+        {compiled && (
+          <PlayControls compiled={compiled} frame={frame} playback={playback}
+            showPaths={showPaths} onTogglePaths={() => setShowPaths((s) => !s)} />
+        )}
+
+        {/* Abspielen (Legacy-Presets) */}
         {preset?.anim && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
             <Btn active onClick={togglePlay}>
@@ -469,7 +563,8 @@ export default function Taktikboard() {
           </div>
         )}
 
-        {/* Aufnahme & Replay */}
+        {/* Aufnahme & Replay (Legacy) */}
+        {!compiled && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 8 }}>
           {!recording ? (
             <Btn active={false} tone={REC_COLOR} onClick={startRec}>
@@ -502,6 +597,7 @@ export default function Taktikboard() {
             </span>
           )}
         </div>
+        )}
 
         {/* Speichern-Feld */}
         {saving && !recording && (
@@ -521,6 +617,16 @@ export default function Taktikboard() {
         )}
 
         {/* Werkzeuge */}
+        {compiled ? (
+          // Im Play: Figuren sind nicht verschiebbar, Zeichnen bleibt zum Erklären
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            <Btn active={mode === "pen"} onClick={() => setMode((m) => (m === "pen" ? "move" : "pen"))}>✎ Stift</Btn>
+            <Btn active={mode === "arrow"} onClick={() => setMode((m) => (m === "arrow" ? "move" : "arrow"))}>↗ Pfeil</Btn>
+            {drawings.length > 0 && <Btn onClick={() => setDrawings([])}>Leeren</Btn>}
+            <Btn active={showDef} tone={DEF_COLOR} onClick={() => setShowDef((v) => !v)}>Verteidigung</Btn>
+            <Btn onClick={resetBoard} title="Play schließen, freies Board">✕</Btn>
+          </div>
+        ) : (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           <Btn active={mode === "move"} onClick={() => setMode("move")}>✥ Bewegen</Btn>
           <Btn active={mode === "pen"} onClick={() => setMode("pen")}>✎ Stift</Btn>
@@ -530,6 +636,7 @@ export default function Taktikboard() {
           <Btn active={showDef} tone={DEF_COLOR} onClick={toggleDef}>Verteidigung</Btn>
           <Btn onClick={resetBoard}>Reset</Btn>
         </div>
+        )}
       </div>
     </div>
   );

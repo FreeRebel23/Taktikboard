@@ -31,7 +31,7 @@ const FACE_WEIGHTS = [1, 0.85, 0.7, 0.5, 0.35, 0.2];
 const TRAIL_STEPS = 8;
 const TRAIL_DT = 0.07;
 
-export const TRAP_RADIUS = 9;
+export const TRAP_RADIUS = 11;
 const LANE_IGNORE_RADIUS = 12;       // Einheiten um die Passgeberin
 const LANE_MAX_LENGTH = 100;         // > 10 m gegen Presse: riskanter langer Pass
 const HAND_RADIUS = 5.2;
@@ -164,7 +164,7 @@ function beatEvaluator(C, b) {
         return add(T, scale(norm(sub(H, T)), a.distance ?? 8));
       case "deny": {
         const B = ballGround(u);
-        return add(add(T, scale(norm(sub(B, T)), a.distance ?? 8)), scale(norm(sub(H, T)), 1.5));
+        return add(add(T, scale(norm(sub(B, T)), a.distance ?? 9)), scale(norm(sub(H, T)), 1.5));
       }
       case "help": {
         const B = ballGround(u);
@@ -247,9 +247,11 @@ export function trapSlots(C, T, R = TRAP_RADIUS) {
 /* Sampling über die Gesamtzeit                                        */
 /* ------------------------------------------------------------------ */
 
+/** Beat zum Zeitpunkt t. Intervalle sind (t0, t1]: an einer Beat-Grenze wird der
+ *  gerade beendete Beat gezeigt ("Zustand nach Beat N") – passend zur Schritt-Navigation. */
 export function beatIndexAt(C, t) {
   if (t <= 0) return 0;
-  for (const b of C.beats) if (t < b.t1 - EPS) return b.index;
+  for (const b of C.beats) if (t <= b.t1 + EPS) return b.index;
   return C.beats.length - 1;
 }
 
@@ -393,7 +395,7 @@ export function sampleFrame(C, t) {
     else if (a?.type === "screen" && ev.local(a, u) > 0.75) stance = "screen";
 
     const trail = [];
-    if (len(v) > 4) for (let i = 0; i <= TRAIL_STEPS; i++) trail.push(S.pos(id, t - i * TRAIL_DT));
+    if (len(v) > 8) for (let i = 0; i <= TRAIL_STEPS; i++) trail.push(S.pos(id, t - i * TRAIL_DT));
 
     players[id] = {
       id, team: e.team, label: e.label ?? id,
@@ -431,8 +433,9 @@ export function sampleFrame(C, t) {
   } else if (ph.state === "held") {
     const pl = players[ph.holder];
     // Im Trap: Ball hoch und nah am Körper schützen
-    const hand = pl.trapped ? add(pl, fromAngle(pl.body, 2.2)) : add(pl, fromAngle(pl.body + 0.4, HAND_RADIUS));
-    ball = { state: "held", holder: ph.holder, x: hand.x, y: hand.y, z: pl.trapped ? 8 : 3.5, protected: pl.trapped };
+    // Im Trap: Ball hoch neben dem Kopf, weg von den Händen der Trapperinnen
+    const hand = pl.trapped ? add(pl, fromAngle(pl.body + 1.9, 4.6)) : add(pl, fromAngle(pl.body + 0.4, HAND_RADIUS));
+    ball = { state: "held", holder: ph.holder, x: hand.x, y: hand.y, z: pl.trapped ? 6 : 3.5, protected: pl.trapped };
   } else {
     ball = { state: "loose", x: ballG.x, y: ballG.y, z: 0 };
   }

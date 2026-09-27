@@ -18,8 +18,12 @@ function HalfLines() {
   );
 }
 
+/** Rand um das Feld (Einwurf-Raum hinter Grund- und Seitenlinien) */
+export const apronFor = (courtType) => (courtType === "full" ? 12 : 8);
+
 export default function Court({ courtType }) {
   const H = courtHeight(courtType);
+  const M = apronFor(courtType);
   return (
     <g>
       <defs>
@@ -29,7 +33,7 @@ export default function Court({ courtType }) {
           <stop offset="100%" stopColor="#B0703C" />
         </linearGradient>
       </defs>
-      <rect x="-8" y="-8" width={COURT_W + 16} height={H + 16} fill="#8A5A30" rx="3" />
+      <rect x={-M} y={-M} width={COURT_W + 2 * M} height={H + 2 * M} fill="#8A5A30" rx="3" />
       <rect x="0" y="0" width={COURT_W} height={H} fill="url(#wood)" />
       {/* Parkett-Andeutung */}
       {Array.from({ length: 11 }, (_, i) => (
@@ -54,5 +58,11 @@ export default function Court({ courtType }) {
   );
 }
 
-/** viewBox inkl. 8 Einheiten Rand (Platz für Einwurf hinter der Grundlinie) */
-export const viewBoxFor = (courtType) => ({ x: -8, y: -8, w: COURT_W + 16, h: courtHeight(courtType) + 16 });
+/** viewBox inkl. Rand. landscape: Ganzfeld quer (Bildschirm X = y, Y = 150 − x) */
+export const viewBoxFor = (courtType, landscape = false) => {
+  const M = apronFor(courtType);
+  const H = courtHeight(courtType);
+  return landscape
+    ? { x: -M, y: -M, w: H + 2 * M, h: COURT_W + 2 * M }
+    : { x: -M, y: -M, w: COURT_W + 2 * M, h: H + 2 * M };
+};

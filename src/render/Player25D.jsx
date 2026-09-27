@@ -11,6 +11,7 @@
  */
 
 import { OFF_COLOR, DEF_COLOR } from "../court/constants.js";
+import { useView } from "./view.js";
 
 const DEG = 180 / Math.PI;
 const LIFT_BODY = -1.0;  // Oberkörper leicht angehoben (Pseudo-Perspektive)
@@ -75,7 +76,11 @@ export function PlayerTrail({ p }) {
 }
 
 export default function Player25D({ p, onDown, interactive, dim = false }) {
+  const { sv, textRot } = useView();
   const s = TEAM_STYLE[p.team];
+  const shadow = sv(1.8, 2.4);
+  const liftB = sv(0, LIFT_BODY);
+  const liftH = sv(0, LIFT_HEAD);
   const bodyDeg = p.body * DEG;
   const gazeDeg = p.gaze * DEG;
   const moving = p.speed > 6;
@@ -88,7 +93,7 @@ export default function Player25D({ p, onDown, interactive, dim = false }) {
       onPointerDown={interactive ? (e) => onDown(e, p.id) : undefined}
       style={{ cursor: interactive ? "grab" : "default", touchAction: "none" }}>
       {/* Schatten */}
-      <ellipse cx="1.8" cy="2.4" rx="7.6" ry="6.6" fill="url(#pl-shadow)" />
+      <circle cx={shadow.x} cy={shadow.y} r="7.4" fill="url(#pl-shadow)" />
 
       {/* Ballbesitz / Trap-Ring am Boden */}
       {p.hasBall && (
@@ -113,7 +118,7 @@ export default function Player25D({ p, onDown, interactive, dim = false }) {
       )}
 
       {/* Oberkörper */}
-      <g transform={`translate(0,${LIFT_BODY}) rotate(${bodyDeg})`}>
+      <g transform={`translate(${liftB.x},${liftB.y}) rotate(${bodyDeg})`}>
         {arms?.map(([x1, y1, x2, y2], i) => (
           <g key={i}>
             <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={s.dark} strokeWidth="2.2" strokeLinecap="round" />
@@ -130,7 +135,7 @@ export default function Player25D({ p, onDown, interactive, dim = false }) {
       </g>
 
       {/* Kopf + Nummer (nicht rotiert → immer lesbar) */}
-      <g transform={`translate(0,${LIFT_HEAD})`}>
+      <g transform={`translate(${liftH.x},${liftH.y}) rotate(${textRot})`}>
         <circle r="3.6" fill={`url(#head-${s.id})`} stroke="#1B1410" strokeWidth="0.55" />
         <text textAnchor="middle" dy={long ? 1.2 : 1.6} fontSize={long ? 3.3 : 4.6} fontWeight="800"
           fill={s.ink} style={{ userSelect: "none", pointerEvents: "none", fontFamily: "inherit" }}>

@@ -2,16 +2,20 @@
  * Fokus-Hervorhebungen und die Laufweg-Notation des aktuellen Beats. */
 
 import { CHALK, COURT_W, OFF_COLOR, DEF_COLOR, TRAP_COLOR, OPEN_COLOR } from "../court/constants.js";
+import { useView } from "./view.js";
 
 const teamColor = (team) => (team === "defense" ? DEF_COLOR : OFF_COLOR);
 const pathD = (pts) => pts.map((p, i) => `${i ? "L" : "M"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ");
 
-function Pill({ x, y, text, color, ink = "#16110C", size = 4.2 }) {
-  const w = text.length * size * 0.56 + 4;
+/** Beschriftung, immer aufrecht. anchor "start"/"end": x ist die linke/rechte Kante (Bildschirm). */
+function Pill({ x, y, text, color, ink = "#16110C", size = 4.2, anchor = "middle" }) {
+  const { textRot } = useView();
+  const w = text.length * size * 0.68 + 4; // fette Versalien
+  const x0 = anchor === "start" ? 0 : anchor === "end" ? -w : -w / 2;
   return (
-    <g transform={`translate(${x},${y})`} pointerEvents="none">
-      <rect x={-w / 2} y={-size * 0.8} width={w} height={size * 1.6} rx={size * 0.8} fill={color} />
-      <text textAnchor="middle" dy={size * 0.36} fontSize={size} fontWeight="800" fill={ink}
+    <g transform={`translate(${x},${y}) rotate(${textRot})`} pointerEvents="none">
+      <rect x={x0} y={-size * 0.8} width={w} height={size * 1.6} rx={size * 0.8} fill={color} />
+      <text x={x0 + w / 2} textAnchor="middle" dy={size * 0.36} fontSize={size} fontWeight="800" fill={ink}
         style={{ letterSpacing: "0.04em", fontFamily: "inherit" }}>{text}</text>
     </g>
   );
@@ -26,7 +30,7 @@ export function TrapOverlay({ trap }) {
   let sweep = angB - angA;
   while (sweep > Math.PI) sweep -= 2 * Math.PI;
   while (sweep < -Math.PI) sweep += 2 * Math.PI;
-  const R = 15;
+  const R = 24;
   const pa = { x: T.x + Math.cos(angA) * R, y: T.y + Math.sin(angA) * R };
   const pb = { x: T.x + Math.cos(angA + sweep) * R, y: T.y + Math.sin(angA + sweep) * R };
   const mid = angA + sweep / 2;
@@ -36,7 +40,7 @@ export function TrapOverlay({ trap }) {
       <path d={`M ${T.x} ${T.y} L ${pa.x} ${pa.y} A ${R} ${R} 0 0 ${sweep > 0 ? 1 : 0} ${pb.x} ${pb.y} Z`}
         fill={TRAP_COLOR} fillOpacity={0.28 * k} stroke={TRAP_COLOR} strokeWidth="0.9" strokeOpacity={0.8 * k} />
       <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={TRAP_COLOR} strokeWidth="1.3" strokeDasharray="2.2 1.4" opacity={k} />
-      {k > 0.5 && <Pill x={T.x + Math.cos(mid) * (R + 7)} y={T.y + Math.sin(mid) * (R + 7)} text="TRAP 2:1" color={TRAP_COLOR} ink="#FFF3F0" />}
+      {k > 0.5 && <Pill x={T.x + Math.cos(mid) * (R + 6)} y={T.y + Math.sin(mid) * (R + 6)} text="TRAP 2:1" color={TRAP_COLOR} ink="#FFF3F0" />}
     </g>
   );
 }
@@ -70,12 +74,16 @@ export function LaneOverlay({ lanes, players }) {
 
 /** Taktische Linie quer über das Feld (z. B. 1. Presslinie) */
 export function LineOverlay({ line }) {
+  const { landscape, sv } = useView();
   const color = line.beaten ? OPEN_COLOR : TRAP_COLOR;
+  // Beschriftung am oberen/linken Bildschirmrand, knapp über der Linie
+  const off = sv(0, -4.6);
+  const lx = landscape ? COURT_W - 2 : 2;
   return (
     <g pointerEvents="none" opacity={line.beaten ? 0.7 : 0.9}>
       <line x1="0" y1={line.y} x2={COURT_W} y2={line.y} stroke={color} strokeWidth={line.beaten ? 0.8 : 1.2}
         strokeDasharray="4 2.5" />
-      <Pill x={24} y={line.y - 4.6} text={line.beaten ? `✓ ${line.label} ÜBERWUNDEN` : line.label}
+      <Pill x={lx + off.x} y={line.y + off.y} anchor={landscape ? "end" : "start"} text={line.beaten ? `✓ ${line.label} ÜBERWUNDEN` : line.label}
         color={color} ink={line.beaten ? "#0E2A1A" : "#FFF3F0"} size={3.6} />
     </g>
   );
@@ -99,6 +107,8 @@ export function MatchupOverlay({ matchups, players }) {
 
 /** Hervorhebungen des Beats: freie Spielerin, Coaching-Hinweise */
 export function FocusOverlay({ focus, players }) {
+  const { sv } = useView();
+  const above = sv(0, -15), callout = sv(0, -18);
   return (
     <g pointerEvents="none">
       {focus.map((f, i) => {
@@ -109,13 +119,13 @@ export function FocusOverlay({ focus, players }) {
             <g key={i} opacity={f.fade}>
               <circle cx={p.x} cy={p.y} r="11" fill={OPEN_COLOR} fillOpacity="0.14" stroke={OPEN_COLOR}
                 strokeWidth="1.1" strokeDasharray="2.6 1.8" className="tb-spin" style={{ transformOrigin: `${p.x}px ${p.y}px` }} />
-              <Pill x={p.x} y={p.y - 15} text={f.label ?? "FREI"} color={OPEN_COLOR} ink="#0E2A1A" />
+              <Pill x={p.x + above.x} y={p.y + above.y} text={f.label ?? "FREI"} color={OPEN_COLOR} ink="#0E2A1A" />
             </g>
           );
         }
         if (f.type === "callout") {
           const color = f.tone === "warn" ? "#FFD166" : CHALK;
-          return <g key={i} opacity={f.fade}><Pill x={p.x} y={p.y + 14} text={f.text} color={color} size={3.6} /></g>;
+          return <g key={i} opacity={f.fade}><Pill x={p.x + callout.x} y={p.y + callout.y} text={f.text} color={color} size={3.6} /></g>;
         }
         return null;
       })}
