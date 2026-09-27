@@ -5,6 +5,9 @@ import { PRESETS, DEFAULT_HALF, DEFAULT_FULL, interpKF } from "./legacy/presets.
 import { FRAME_MS, clone, loadSeqs, persistSeqs } from "./legacy/recordingStore.js";
 import useZoomPan from "./hooks/useZoomPan.js";
 import Btn from "./ui/Btn.jsx";
+import Player25D, { PlayerDefs } from "./render/Player25D.jsx";
+import Ball25D, { BallDefs } from "./render/Ball25D.jsx";
+import { boardPlayers } from "./render/boardView.js";
 
 /* ============================================================
    TAKTIKBOARD – Basketball Coach Board
@@ -14,36 +17,6 @@ import Btn from "./ui/Btn.jsx";
 
 const SNAP_PX = 60;                          // Snap-Radius in Bildschirm-Pixeln
 const BALL_OFFSET = { x: 6.5, y: -6.5 };     // Ball sitzt an der Schulter des Trägers
-
-/* ---------------- Tokens ---------------- */
-
-function PlayerToken({ id, pos, onDown, interactive }) {
-  const isDef = id.startsWith("d");
-  const num = id[1];
-  return (
-    <g transform={`translate(${pos.x},${pos.y})`}
-      onPointerDown={interactive ? (e) => onDown(e, id) : undefined}
-      style={{ cursor: interactive ? "grab" : "default", touchAction: "none" }}>
-      <circle r="7.6" fill="rgba(0,0,0,0.25)" cx="0.6" cy="1" />
-      <circle r="7.2" fill={isDef ? DEF_COLOR : OFF_COLOR} stroke="#1B1410" strokeWidth="0.8" />
-      <text textAnchor="middle" dy="2.4" fontSize="6.4" fontWeight="800"
-        fill="#FFF7EC" style={{ userSelect: "none", pointerEvents: "none", fontFamily: "inherit" }}>
-        {isDef ? `X${num}` : num}
-      </text>
-    </g>
-  );
-}
-
-function BallToken({ pos, onDown, interactive }) {
-  return (
-    <g transform={`translate(${pos.x},${pos.y})`}
-      onPointerDown={interactive ? (e) => onDown(e, "ball") : undefined}
-      style={{ cursor: interactive ? "grab" : "default", touchAction: "none" }}>
-      <circle r="4" fill={BALL_COLOR} stroke="#3A2410" strokeWidth="0.7" />
-      <path d="M -4 0 H 4 M 0 -4 V 4" stroke="#3A2410" strokeWidth="0.5" fill="none" />
-    </g>
-  );
-}
 
 /* ---------------- App ---------------- */
 
@@ -335,6 +308,11 @@ export default function Taktikboard() {
         ::-webkit-scrollbar{height:0;width:0;}
         button:focus-visible{outline:2px solid ${OFF_COLOR};outline-offset:2px;}
         @keyframes recpulse{0%,100%{opacity:1;}50%{opacity:0.25;}}
+        @keyframes tbpulse{0%,100%{opacity:1;}50%{opacity:0.35;}}
+        @keyframes tbspin{to{transform:rotate(360deg);}}
+        .tb-pulse{animation:tbpulse 0.9s ease-in-out infinite;}
+        .tb-spin{animation:tbspin 6s linear infinite;transform-box:view-box;}
+        @media (prefers-reduced-motion: reduce){.tb-pulse,.tb-spin{animation:none;}}
       `}</style>
 
       {/* ===== Obere Leiste (fix) ===== */}
@@ -411,6 +389,8 @@ export default function Taktikboard() {
             <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" />
             </marker>
+            <PlayerDefs />
+            <BallDefs />
           </defs>
 
           <Court courtType={courtType} />
@@ -444,16 +424,19 @@ export default function Taktikboard() {
             )
           )}
 
-          {/* Spieler */}
-          {showDef && DEF.map((id) => (
-            <PlayerToken key={id} id={id} pos={displayPos(id)} onDown={onTokenDown}
-              interactive={mode === "move"} />
+          {/* Spielerinnen (2,5D) */}
+          {boardPlayers({
+            ids: showDef ? [...DEF, ...OFF] : OFF,
+            pos: displayPos,
+            prevPos: preset?.anim && progress > 0.01 ? (id) => (preset.anim[id] ? interpKF(preset.anim[id], progress - 0.01) : null) : null,
+            ball: displayPos("ball"),
+            holder: preset?.anim && progress > 0 ? null : ballOwnerId,
+            dt: 0.045,
+          }).map((p) => (
+            <Player25D key={p.id} p={p} onDown={onTokenDown} interactive={mode === "move"} />
           ))}
-          {OFF.map((id) => (
-            <PlayerToken key={id} id={id} pos={displayPos(id)} onDown={onTokenDown}
-              interactive={mode === "move"} />
-          ))}
-          <BallToken pos={displayPos("ball")} onDown={onTokenDown} interactive={mode === "move"} />
+          <Ball25D ball={{ ...displayPos("ball"), z: ballOwnerId && !(preset?.anim && progress > 0) ? 3.5 : 0 }}
+            onDown={onTokenDown} interactive={mode === "move"} />
         </svg>
         </div>
 
