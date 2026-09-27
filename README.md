@@ -31,9 +31,21 @@ Handy/Tablet (gleiches WLAN) im Browser öffnen.
 > Static-Host mit HTTPS ablegen (z. B. Netlify, Vercel, GitHub Pages) – die App ist
 > dank `base: "./"` ohne weitere Konfiguration deploybar.
 
+## Tests
+
+```bash
+npm test           # Play-Modell, Animation Engine, Press-Break-Szenario (node:test)
+```
+
 ## Aufbau
-- `src/Taktikboard.jsx` – die komplette App-Komponente
+- `src/Taktikboard.jsx` – App-Orchestrierung (Freimodus, Legacy-Presets, aktionsbasierte Plays)
+- `src/play/` – Play-Datenmodell, Aktionen, Animation Engine, Plays (z. B. `plays/pressBreak.js`)
+- `src/render/` – 2,5D-Spielerinnen, Ball, taktische Ebenen
+- `src/court/`, `src/hooks/`, `src/ui/`, `src/legacy/` – Spielfeld, Gesten/Playback, UI, Bestand (Keyframes, REC)
 - `src/main.jsx` – React-Einstiegspunkt
 - `vite.config.js` – Vite + PWA-Konfiguration (Manifest, Service Worker)
 - `scripts/gen-icons.mjs` – generiert die PWA-Icons
 - `public/` – Icons & favicon
+
+Architektur, Datenmodell und Stand: siehe [`DEVELOPMENT_STATUS.md`](DEVELOPMENT_STATUS.md).
+Produktleitbild: [`NORTH_STAR.md`](NORTH_STAR.md).
