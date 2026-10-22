@@ -4,7 +4,6 @@ import { OFF_COLOR } from "../court/constants.js";
 export default function GlobalStyle() {
   return (
     <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;700&display=swap');
       input[type=range]{accent-color:${OFF_COLOR};}
       ::-webkit-scrollbar{height:0;width:0;}
       button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{outline:2px solid ${OFF_COLOR};outline-offset:2px;}
