@@ -8,6 +8,7 @@
 import { ACTIONS, actionWindow } from "./actions.js";
 import { passKind } from "./ballFlight.js";
 import { STANCES } from "./model.js";
+import { DEFENSE_STATES, stateSequence, zoneGeometry } from "./teamDefense.js";
 
 const COURT_W = 150;
 
@@ -76,6 +77,18 @@ function actionText(C, b, a, id) {
     }
     case "switch": return `Übernehmen: jetzt ${label(C, a.target)} verteidigen (Switch)`;
     case "closeout": return `Closeout auf ${label(C, a.target)}: schnell heran, Hand hoch`;
+    case "man":
+    case "zone": {
+      const head = t === "man" ? `Mann-Mann gegen ${label(C, a.target)}` : `Zone „${zoneGeometry(C, a.zone)?.label ?? a.zone}“`;
+      const seq = stateSequence(b.cache.get("sim"), id);
+      if (!seq.length) return head;
+      const parts = seq.map((r) => {
+        const L = DEFENSE_STATES[r.state]?.label ?? r.state;
+        const who = r.resp && (t === "zone" || r.resp !== a.target) ? ` (${label(C, r.resp)})` : "";
+        return `${L.charAt(0)}${L.slice(1).toLowerCase()}${who}`;
+      });
+      return `${head}: ${parts.join(" → ")}`;
+    }
     default: return ACTIONS[t]?.label ?? t;
   }
 }
@@ -112,7 +125,7 @@ export function describeRole(C, beatIndex, id) {
   let watch = role.watch ?? null;
   let autoWatch = false;
   if (!watch) {
-    const rel = (b.byPlayer.get(id) ?? []).find((a) => ACTIONS[a.type]?.kind === "relation" && a.target);
+    const rel = (b.byPlayer.get(id) ?? []).find((a) => ["relation", "system"].includes(ACTIONS[a.type]?.kind) && a.target);
     watch = rel ? rel.target : "ball";
     autoWatch = true;
   }

@@ -112,6 +112,12 @@ export function validatePlay(play) {
         else if (!isOff(a.target)) errors.push(`${where}: ${A(a.type)} – das Ziel (${L(a.target)}) muss eine Angreiferin sein`);
         for (const pid of actorsOf(a)) if (ids.has(pid) && !isDef(pid)) errors.push(`${where}: ${A(a.type)} können nur Verteidigerinnen ausführen (${L(pid)})`);
       }
+      if (a.type === "man") {
+        if (!ids.has(a.target)) errors.push(`${where}: Mann-Mann von ${L(a.player)} braucht eine Gegenspielerin`);
+        else if (!isOff(a.target)) errors.push(`${where}: Mann-Mann – das Ziel (${L(a.target)}) muss eine Angreiferin sein`);
+      }
+      if (a.type === "zone" && !play.defense?.zones?.[a.zone]) errors.push(`${where}: Zone von ${L(a.player)} – Raum „${a.zone ?? "?"}“ ist nicht definiert`);
+      if (def.kind === "system" && ids.has(a.player) && !isDef(a.player)) errors.push(`${where}: ${A(a.type)} können nur Verteidigerinnen ausführen (${L(a.player)})`);
       if (a.type === "trap" && (a.players?.length ?? 0) !== 2) errors.push(`${where}: Ein Trap braucht genau zwei Verteidigerinnen`);
       if (def.needsBall && a.player !== holder) {
         // Dribbling nach einem Pass im selben Beat ist erlaubt, wenn der Pass vorher ankommt
@@ -137,6 +143,10 @@ export function validatePlay(play) {
       if (!ids.has(pid)) errors.push(`${where}: Coaching für unbekannte Spielerin "${L(pid)}"`);
       if (r.watch && r.watch !== "ball" && typeof r.watch === "string" && !ids.has(r.watch)) errors.push(`${where}: "${L(pid)}" beobachtet unbekannte Spielerin "${L(r.watch)}"`);
       if (r.stance && !STANCES[r.stance]) warnings.push(`${where}: unbekannte Haltung "${r.stance}" bei "${L(pid)}"`);
+    }
+
+    for (const pid of beat.principles ?? []) {
+      if (!(play.principles ?? []).some((x) => x.id === pid)) warnings.push(`${where}: Prinzip „${pid}“ ist nicht beschrieben`);
     }
 
     for (const f of beat.focus ?? []) {

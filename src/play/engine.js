@@ -17,6 +17,7 @@ import { PROFILES, clamp01 } from "./easing.js";
 import { buildPath, pointOnPath } from "./path.js";
 import { passKind, beatsHands, flightHeight } from "./ballFlight.js";
 import { validatePlay, holderTimeline, passesOf, beatIndexById, teamOf } from "./model.js";
+import { rulesFor, simulateDefense, simPos, simInfo, zoneGeometry, handoversUntil, isSystem } from "./teamDefense.js";
 import {
   add, sub, scale, norm, lerp, dist, len, angleOf, fromAngle, angleDiff,
   clampAngleAround, distToSegment,
@@ -37,6 +38,14 @@ export const LANE_NEAR_RADIUS = 12;         // Verteidigerinnen direkt an der Pa
 export const LANE_REACH = 8;                // Armreichweite einer nahen Verteidigerin (Einheiten)
 export const LANE_MAX_LENGTH = 100;         // > 10 m gegen Presse: riskanter langer Pass
 const HAND_RADIUS = 5.2;
+
+/** Plausible Passgeschwindigkeiten (m/s) und Mindestflugzeit (s) je Passart */
+export const PASS_SPEED = {
+  chest: { min: 5, max: 15, minTime: 0.25 },
+  bounce: { min: 4, max: 10, minTime: 0.4 },
+  lob: { min: 3, max: 10, minTime: 0.65 },
+};
+const PASS_LABEL = { chest: "Direktpass", bounce: "Bodenpass", lob: "Lob" };
 
 /* ------------------------------------------------------------------ */
 /* Kompilieren                                                          */
@@ -62,6 +71,7 @@ export function compilePlay(play) {
   const holders = holderTimeline(play);
   let startPos = structuredClone(play.start.positions);
   let t = 0;
+  let carry = new Map(); // System-Verteidigung läuft weiter, bis eine neue Aktion kommt
   play.beats.forEach((beat, index) => {
     const dur = beat.duration / 1000;
     const byPlayer = new Map();
@@ -72,11 +82,17 @@ export function compilePlay(play) {
         byPlayer.get(pid).push(a);
       }
     }
+    for (const [pid, a] of carry) if (!byPlayer.has(pid)) byPlayer.set(pid, [{ ...a, start: 0, end: 1, carried: true }]);
+    carry = new Map();
+    for (const [pid, list] of byPlayer) {
+      const last = list.reduce((m, a) => (actionWindow(a).start >= actionWindow(m).start ? a : m), list[0]);
+      if (isSystem(last.type)) carry.set(pid, last);
+    }
     for (const list of byPlayer.values()) list.sort((a, b) => actionWindow(a).start - actionWindow(b).start);
     const b = {
       index, beat, t0: t, t1: t + dur, dur,
       startPos, startHolder: holders[index], endHolder: holders[index + 1],
-      byPlayer, passes: passesOf(beat),
+      byPlayer, passes: passesOf(beat), rules: rulesFor(play, beat),
       cache: new Map(), // unveränderliche Daten je Aktion (Pfade, Trap-Zuordnung)
     };
     C.beats.push(b);
@@ -151,12 +167,40 @@ function beatEvaluator(C, b) {
       p = pointOnPath(b.cache.get(ck), s);
     } else if (def.kind === "relation") {
       p = lerp(from, relationAnchor(a, id, u), s);
+    } else if (def.kind === "system") {
+      p = simPos(defenseSim(), id, u) ?? from;
     } else {
       p = from;
     }
     visiting.delete(key);
     memo.set(key, p);
     return p;
+  }
+
+  /** Mannschaftsverteidigung des Beats – einmal simuliert, dann zwischengespeichert */
+  function defenseSim() {
+    if (b.cache.has("sim")) return b.cache.get("sim");
+    const defenders = [];
+    for (const [id, acts] of b.byPlayer) {
+      const k = acts.findIndex((a) => isSystem(a.type));
+      if (k < 0) continue;
+      const a = acts[k];
+      defenders.push({ id, action: a, startU: actionWindow(a).start, startPos: (u0) => (k === 0 ? b.startPos[id] : evalAction(id, k - 1, u0)) });
+    }
+    const offense = C.ids.filter((id) => C.entity[id].team === "offense");
+    // Platzhalter gegen Rekursion, falls eine Beziehung auf eine System-Verteidigerin zeigt
+    b.cache.set("sim", { n: 1, pos: Object.fromEntries(defenders.map((d) => [d.id, [b.startPos[d.id], b.startPos[d.id]]])), state: {}, resp: {}, zoneOwner: [], handovers: [] });
+    const before = C.beats[b.index - 1]?.cache.get("sim")?.carry;
+    const sim = simulateDefense({ C, b, rules: b.rules, offense, defenders, posAt, ballGround, ballPhase, prev: before });
+    b.cache.set("sim", sim);
+    return sim;
+  }
+
+  /** Zustand einer System-Verteidigerin bei u (oder null) */
+  function defenseInfo(id, u) {
+    const a = actionAt(id, u);
+    if (!a || !isSystem(a.type)) return null;
+    return { ...simInfo(defenseSim(), id, u), system: a.type, zone: a.zone ?? null };
   }
 
   function relationAnchor(a, id, u) {
@@ -236,7 +280,7 @@ function beatEvaluator(C, b) {
     return k < 0 ? null : b.byPlayer.get(id)[k];
   }
 
-  return { posAt, ballPhase, ballGround, actionAt, local, profileOf };
+  return { posAt, ballPhase, ballGround, actionAt, local, profileOf, defenseInfo, defenseSim };
 }
 
 /** Zwei Trap-Slots um die Ballführerin: einer nimmt den Weg nach vorne,
@@ -315,6 +359,14 @@ function makeSampler(C) {
         } else {
           gazeP = s.ev.ballGround(s.u);
         }
+      } else if (a && isSystem(a.type)) {
+        // Ball und Verantwortung gleichzeitig sehen: Körper zur Gegenspielerin, Blick zum Ball
+        const info = s.ev.defenseInfo(id, s.u);
+        const ballP = s.ev.ballGround(s.u);
+        if (info?.resp) {
+          bodyLocked = true;
+          gazeP = info.state === "ball" || info.state === "closeout" ? s.ev.posAt(info.resp, s.u) : ballP;
+        } else gazeP = ballP;
       } else if (a && ACTIONS[a.type]?.kind === "relation" && ACTIONS[a.type].implemented) {
         bodyLocked = true; // defensive Beinarbeit: Körper bleibt zur Gegenspielerin
         gazeP = ["guard", "trap", "switch", "closeout"].includes(a.type) ? s.ev.posAt(a.target, s.u) : s.ev.ballGround(s.u);
@@ -327,7 +379,7 @@ function makeSampler(C) {
     let gaze = len(toGaze) > 0.5 ? angleOf(toGaze) : angleOf(C.attackDir);
     let body = gaze;
     if (bodyLocked && a) {
-      const tp = s.ev.posAt(a.target, s.u);
+      const tp = s.ev.posAt(isSystem(a.type) ? s.ev.defenseInfo(id, s.u)?.resp ?? a.target : a.target, s.u);
       if (dist(tp, p) > 0.5) body = angleOf(sub(tp, p));
     } else if (speed > 12) {
       const w = clamp01((speed - 12) / 25);
@@ -422,7 +474,18 @@ function checkPasses(C) {
       if (!lane) continue;
       const where = `Beat ${b.index + 1} (${b.beat.title ?? b.beat.id})`;
       const L = (id) => C.entity[id]?.label ?? id;
-      if (lane.status === "hands" && !beatsHands(passKind(p))) out.push(`${where}: Pass ${L(p.from)}→${L(p.to)} geht direkt durch die Arme von ${lane.blockedBy.map(L).join(", ")} – nur als Lob oder Bodenpass möglich`);
+      // Realistisches Tempo je Passart (sonst wirkt ein Bodenpass wie ein Strich oder ein Lob wie ein Direktpass)
+      const tEnd = b.t0 + actionWindow(p).end * b.dur;
+      const flight = tEnd - t;
+      const meters = dist(f.players[p.from], sampleFrame(C, tEnd).players[p.to]) / 10;
+      const kind = passKind(p);
+      const speed = meters / Math.max(flight, 1e-3);
+      const range = PASS_SPEED[kind];
+      if (speed > range.max || speed < range.min || flight < range.minTime) {
+        out.push(`${where}: Pass ${L(p.from)}→${L(p.to)} (${PASS_LABEL[kind]}) dauert ${flight.toFixed(2).replace(".", ",")} s für ${meters.toFixed(1).replace(".", ",")} m – realistisch sind ${range.min}–${range.max} m/s${range.minTime ? ` und mindestens ${String(range.minTime).replace(".", ",")} s` : ""}. Zeitfenster anpassen.`);
+      }
+      if (p.contested) continue; // Trainerin spielt den Pass bewusst gegen die Verteidigung
+      if (lane.status === "hands" && !beatsHands(kind)) out.push(`${where}: Pass ${L(p.from)}→${L(p.to)} geht direkt durch die Arme von ${lane.blockedBy.map(L).join(", ")} – nur als Lob oder Bodenpass möglich`);
       if (lane.status === "closed") out.push(`${where}: Pass ${L(p.from)}→${L(p.to)} durch eine geschlossene Passlinie (Empfängerin gedeckt oder Verteidigerin in der Linie)`);
     }
   }
@@ -470,7 +533,9 @@ export function sampleFrame(C, t) {
     const e = C.entity[id];
     const hasBall = (ph.state === "held" || ph.state === "dribble") && ph.holder === id;
 
+    const dinfo = ev.defenseInfo(id, u);
     let stance = "normal";
+    if (dinfo) stance = { ball: "on-ball", closeout: "closeout", deny: "deny", help: "help" }[dinfo.state] ?? "normal";
     if (trappedBy.has(id) && trappedBy.get(id).strength > 0.35) stance = "trap";
     else if (a?.type === "closeout") stance = "closeout";
     else if ((a?.type === "guard" || a?.type === "switch") && (ph.holder === a.target || ph.pass?.from === a.target)) {
@@ -491,6 +556,7 @@ export function sampleFrame(C, t) {
       trapped: traps.some((tr) => tr.target === id && tr.strength > 0.35),
       trail,
       screenAngle: stance === "screen" ? (a.angle != null ? (a.angle * Math.PI) / 180 : f.body) : null,
+      defense: dinfo,
     };
   }
 
@@ -540,9 +606,27 @@ export function sampleFrame(C, t) {
   const matchups = [];
   for (const id of C.ids) {
     const a = ev.actionAt(id, u);
+    const d = players[id].defense;
+    if (d) {
+      if (d.resp) matchups.push({ defender: id, target: d.resp, type: d.system, state: d.state, onBall: ph.holder === d.resp });
+      continue;
+    }
     if (!a || ACTIONS[a.type]?.kind !== "relation" || !a.target || a.type === "trap") continue;
     matchups.push({ defender: id, target: a.target, type: a.type, onBall: ph.holder === a.target });
   }
+
+  /* ---- Mannschaftsverteidigung: Zonenräume und Übergaben ---- */
+  const zones = [];
+  for (const id of C.ids) {
+    const d = players[id].defense;
+    if (d?.system !== "zone") continue;
+    const g = zoneGeometry(C, d.zone);
+    if (g) zones.push({ id: d.zone, defender: id, label: g.label, area: g.area, home: g.home, state: d.state });
+  }
+  const hasSystem = C.ids.some((id) => players[id].defense);
+  const handovers = hasSystem
+    ? handoversUntil(ev.defenseSim(), u).map((h) => ({ ...h, age: (u - h.u) * b.dur })).filter((h) => h.age < 1.6)
+    : [];
 
   /* ---- Fokus-Hervorhebungen ---- */
   const focus = (beat.focus ?? [])
@@ -552,7 +636,7 @@ export function sampleFrame(C, t) {
   return {
     t, total: C.total, beatIndex: b.index, beatProgress: u,
     beat: { id: beat.id, title: beat.title, text: beat.text },
-    players, ball, traps, lanes, lines, matchups, focus,
+    players, ball, traps, lanes, lines, matchups, focus, zones, handovers,
   };
 }
 
@@ -583,7 +667,7 @@ export function beatDiagram(C, index) {
     for (let i = 1; i < pts.length; i++) travelled += dist(pts[i - 1], pts[i]);
     if (travelled < 3) continue;
     const main = moving.reduce((m, a) => (ACTIONS[a.type].kind === "path" ? a : m), moving[0]);
-    const kind = ACTIONS[main.type].kind === "relation" ? "relation" : main.type;
+    const kind = ["relation", "system"].includes(ACTIONS[main.type].kind) ? "relation" : main.type;
     out.push({ kind, player: id, team: C.entity[id].team, points: pts });
   }
   for (const p of b.passes) {

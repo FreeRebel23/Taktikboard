@@ -67,7 +67,7 @@ export const pressBreak = {
         { type: "hold", player: "d1", start: 0.3, end: 0.55 },
         { type: "guard", player: "d1", target: "o1", start: 0.55, distance: 7.5, profile: "sprint" },
         { type: "guard", player: "d4", target: "o4", distance: 8 },
-        { type: "pass", from: "o4", to: "o1", start: 0.52, end: 0.8, lob: true }, // Überkopf über die Arme von X4
+        { type: "pass", from: "o4", to: "o1", start: 0.5, end: 0.86, lob: true }, // Überkopf über die Arme von X4
         { type: "deny", player: "d2", target: "o2" },
         { type: "hold", player: "o2" },
         { type: "hold", player: "o5" },

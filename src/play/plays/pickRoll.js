@@ -122,7 +122,7 @@ export const pickRoll = {
               o4: { task: "Bereit zum Fangen und Werfen.", stance: "open" },
             },
             actions: [
-              { type: "pass", from: "o1", to: "o5", start: 0.05, end: 0.45, kind: "bounce" },
+              { type: "pass", from: "o1", to: "o5", start: 0.05, end: 0.62, kind: "bounce" },
               { type: "hold", player: "o1" },
               { type: "hold", player: "o5" },
               { type: "sprint", player: "d5", to: { x: 86, y: 54 }, start: 0.25 },
@@ -205,7 +205,7 @@ export const pickRoll = {
               o5: { task: "Fangen, X1 auf dem Rücken halten, Abschluss am Korb.", stance: "protect", why: "Die Verteidigerin ist kleiner und steht hinter dir." },
             },
             actions: [
-              { type: "pass", from: "o1", to: "o5", start: 0.1, end: 0.45, kind: "bounce" },
+              { type: "pass", from: "o1", to: "o5", start: 0.1, end: 0.6, kind: "bounce" },
               { type: "hold", player: "o1" },
               { type: "guard", player: "d5", target: "o1" },
               { type: "hold", player: "o5" },

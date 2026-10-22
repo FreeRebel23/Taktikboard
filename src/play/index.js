@@ -1,11 +1,16 @@
 /* Registry der aktionsbasierten Plays + öffentliche Play-API */
 import { pressBreak } from "./plays/pressBreak.js";
 import { pickRoll } from "./plays/pickRoll.js";
+import { manHelp } from "./plays/manHelp.js";
+import { zone23 } from "./plays/zone23.js";
 import { compilePlay } from "./engine.js";
 import { resolveVariant, allChoicePaths, validateTree } from "./variants.js";
 import { validatePlay } from "./model.js";
 
-export const PLAYS = [pressBreak, pickRoll];
+export const PLAYS = [pressBreak, pickRoll, manHelp, zone23];
+
+/** Kategorie eines Spielzugs: Angriff (Standard) oder Verteidigung */
+export const categoryOf = (play) => play.category ?? "offense";
 
 export { compilePlay, sampleFrame, beatDiagram, beatBoundaries, beatIndexAt, passLanes } from "./engine.js";
 export { validatePlay } from "./model.js";

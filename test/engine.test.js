@@ -125,8 +125,9 @@ test("direkter Pass durch die Arme einer Verteidigerin erzeugt eine Warnung, als
     { type: "hold", player: "d1" },
     { type: "pass", from: "o1", to: "o2", start: 0.2, end: 0.6, lob },
   ] });
-  assert.ok(pass(false).warnings.some((w) => w.includes("nur als Lob")));
-  assert.deepEqual(pass(true).warnings, []);
+  const lane = (C) => C.warnings.filter((w) => !w.includes("realistisch"));
+  assert.ok(lane(pass(false)).some((w) => w.includes("nur als Lob")));
+  assert.deepEqual(lane(pass(true)), []);
 });
 
 test("Verteidigerin HINTER der Empfängerin schließt die Passlinie nicht (Post-Entry)", () => {
@@ -143,9 +144,22 @@ test("Bodenpass und Lob kommen an Händen vorbei, direkter Pass nicht", () => {
     { type: "hold", player: "d1" },
     { type: "pass", from: "o1", to: "o2", start: 0.2, end: 0.6, kind },
   ] });
-  assert.ok(pass("chest").warnings.some((w) => w.includes("Bodenpass")));
-  assert.deepEqual(pass("bounce").warnings, []);
-  assert.deepEqual(pass("lob").warnings, []);
+  const lane = (C) => C.warnings.filter((w) => !w.includes("realistisch"));
+  assert.ok(lane(pass("chest")).some((w) => w.includes("Bodenpass")));
+  assert.deepEqual(lane(pass("bounce")), []);
+  assert.deepEqual(lane(pass("lob")), []);
+});
+
+test("Passtempo: zu schneller Bodenpass und zu kurzer Lob werden gemeldet, realistische nicht", () => {
+  const pass = (kind, end) => laneSetup({ x: 140, y: 140 }, { actions: [
+    { type: "pass", from: "o1", to: "o2", start: 0.1, end, kind },
+  ] }).warnings.filter((w) => w.includes("realistisch"));
+  // laneSetup: Beat 1 s, Pass 5,5 m
+  assert.equal(pass("bounce", 0.4).length, 1, "0,3 s Bodenpass (18 m/s) ist zu schnell");
+  assert.equal(pass("lob", 0.5).length, 1, "0,4 s Lob ist zu kurz");
+  assert.equal(pass("chest", 0.6).length, 0, "0,5 s Direktpass (11 m/s) ist realistisch");
+  assert.equal(pass("bounce", 0.8).length, 0);
+  assert.equal(pass("lob", 0.9).length, 0);
 });
 
 import { freeSpace, corridors, passWindows } from "../src/play/analysis.js";

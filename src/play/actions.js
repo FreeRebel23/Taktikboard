@@ -4,6 +4,8 @@
      static   – Spielerin bleibt stehen (dreht sich ggf.)
      relation – Position ergibt sich aus Beziehungen (Gegenspielerin, Ball, Korb)
      ball     – Ballaktion (Pass) – verändert Ballbesitz, nicht die Position
+     system   – Mannschaftsverteidigung nach Regeln der Trainerin (teamDefense.js);
+                bleibt in Folge-Beats aktiv, bis die Verteidigerin eine neue Aktion bekommt
    implemented: false → Modell akzeptiert die Aktion (mit Warnung), Engine behandelt sie als "hold". */
 
 export const ACTIONS = {
@@ -22,6 +24,8 @@ export const ACTIONS = {
   trap:     { kind: "relation", profile: "close", implemented: true, label: "Trap / Doppeln", group: true },
   switch:   { kind: "relation", profile: "close", implemented: true, label: "Switch" },
   closeout: { kind: "relation", profile: "close", implemented: true, label: "Closeout" },
+  man:      { kind: "system", implemented: true, label: "Mann-Mann (Regeln)" },
+  zone:     { kind: "system", implemented: true, label: "Zone (Raum)" },
   hedge:    { kind: "relation", implemented: false, label: "Hedge" },
   handoff:  { kind: "ball", implemented: false, label: "Handoff" },
 };
