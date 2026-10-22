@@ -16,7 +16,9 @@ import { passWindows } from "../play/analysis.js";
 import { AnalysisContext } from "../render/analysisContext.js";
 import { CHALK } from "../court/constants.js";
 import { C_UI, Segmented, IconButton, Chip } from "./studioUi.jsx";
-import { RolePicker, TaskCard, DecisionCard, PlayerControls } from "./PlayerPanel.jsx";
+import { RolePicker, TaskCard, DecisionCard, PlayerControls, QuizCard, HowTo, Legend } from "./PlayerPanel.jsx";
+import { compileReadQuiz, quizAnswer } from "../play/readQuiz.js";
+import { logRead } from "../store/readLog.js";
 import { VariantBar, AnalysisPanel, PassWindowStrip } from "./CoachParts.jsx";
 import Builder from "./Builder.jsx";
 import ShareSheet from "./ShareSheet.jsx";
@@ -44,6 +46,9 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
   const [tool, setTool] = useState(null); // "pen" | "arrow" | null
   const [drawings, setDrawings] = useState([]);
   const [sharing, setSharing] = useState(false);
+  const [quiz, setQuiz] = useState(null);         // Read-Training: { key, d, secret, C, t0, phase, picked }
+  const [help, setHelp] = useState(false);
+  const autoplayTo = useRef(null);                // nach dem Quiz die Lösung automatisch zeigen
   const stroke = useRef(null);
   const wide = useWide();
 
@@ -53,6 +58,7 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
     try { return { C: compileVariant(play, choices) }; } catch (e) { return { error: e.message }; }
   }, [play, choices]);
   const C = compiled.C;
+  const variantKey = C?.play.variant.key ?? "";
   const playback = usePlayback(C?.total ?? 0, play.id);
   const time = Math.min(playback.time, C?.total ?? 0);
   const frame = C ? sampleFrame(C, time) : null;
@@ -64,10 +70,47 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
   const pending = mode === "player" ? decisions.find((d) => !answered[d.decision.id] && Math.abs(time - d.t) < EPS && !playback.playing) : null;
   const atEnd = C ? time >= C.total - 1e-3 : true;
 
+  /* ---------- Read-Training ---------- */
+  const qp = usePlayback(quiz?.C.total ?? 0, quiz?.key ?? 0);
+  useEffect(() => {
+    if (quiz?.phase === "watch") { qp.seek(quiz.t0); qp.playTo(quiz.C.total); }
+  }, [quiz?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (quiz?.phase === "watch" && !qp.playing && qp.time >= quiz.C.total - 1e-3) setQuiz((q) => ({ ...q, phase: "ask" }));
+  }, [qp.playing, qp.time]); // eslint-disable-line react-hooks/exhaustive-deps
+  const startQuiz = (d) => {
+    const opts = d.decision.options;
+    const secret = opts[Math.floor(Math.random() * opts.length)];
+    try {
+      const q = compileReadQuiz(play, choices, d.decision.id, secret.id);
+      setQuiz({ key: Date.now(), d, secret, C: q.C, t0: q.t0, phase: "watch", picked: null });
+    } catch { chooseFromQuiz(d, secret.id); }
+  };
+  const replayQuiz = () => setQuiz((q) => ({ ...q, key: Date.now(), phase: "watch" }));
+  const answerQuiz = (optionId) => {
+    logRead({ play: play.name, me: me ? C.entity[me]?.label : null, read: quiz.d.decision.title,
+      shown: quiz.secret.label, answer: quizAnswer(quiz.d.decision.options.find((o) => o.id === optionId)), correct: optionId === quiz.secret.id });
+    setQuiz((q) => ({ ...q, phase: "done", picked: optionId }));
+  };
+  const chooseFromQuiz = (d, optionId) => {
+    setQuiz(null);
+    setChoices((c) => ({ ...c, [d.decision.id]: optionId }));
+    setAnswered((a) => ({ ...a, [d.decision.id]: true }));
+    playback.seek(d.t);
+    autoplayTo.current = d.atBeat;
+  };
+  // Nach dem Wechsel der Variante den ersten Beat der Lösung abspielen
+  useEffect(() => {
+    if (autoplayTo.current == null || !C) return;
+    const b = C.beats[autoplayTo.current];
+    autoplayTo.current = null;
+    if (b) playback.playTo(b.t1);
+  }, [variantKey, !quiz]); // eslint-disable-line react-hooks/exhaustive-deps
+  const quizFrame = quiz ? sampleFrame(quiz.C, Math.min(qp.time, quiz.C.total)) : null;
+
   // Beat, um den es gerade geht: an einer Grenze (pausiert) der kommende Beat → Vorschau
   const boundaryIdx = C ? C.beats.findIndex((b) => Math.abs(time - b.t1) < EPS) : -1;
   const displayBeat = !C ? 0 : (!playback.playing && boundaryIdx >= 0 && boundaryIdx < C.beats.length - 1) ? boundaryIdx + 1 : frame.beatIndex;
-  const variantKey = C?.play.variant.key ?? "";
 
   /* ---------- Spielerinnen-Modus: Rolle, Ziel, Kamera ---------- */
   const playerInfo = useMemo(() => {
@@ -98,6 +141,16 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
     me, related: playerInfo.related, watch: playerInfo.watch, watchLabel: playerInfo.watchLabel,
     ghost: playerInfo.ghost && Math.hypot(playerInfo.ghost.x - frame.players[me].x, playerInfo.ghost.y - frame.players[me].y) > 3 ? playerInfo.ghost : null,
     myPath: playerInfo.path,
+  } : null;
+
+  // Read-Training: nur die eigene Figur und worauf zu achten ist – keine Wege, kein Ziel
+  const quizCamera = useMemo(() => (quiz && me && playerCam ? playerCamera(quiz.C, quiz.C.beats.length - 1, me) : null),
+    [quiz?.key, me, playerCam]); // eslint-disable-line react-hooks/exhaustive-deps
+  const quizWatch = quiz?.d.decision.watch?.[0] ?? null;
+  const quizScene = quiz && me ? {
+    me, related: new Set([me, ...(quiz.d.decision.watch ?? [])]), watch: quizWatch,
+    watchLabel: quizWatch ? `ACHTE AUF ${quizWatch === "ball" ? "DEN BALL" : quiz.C.entity[quizWatch]?.label}` : null,
+    ghost: null, myPath: null,
   } : null;
 
   /* ---------- Steuerung ---------- */
@@ -142,7 +195,7 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
   // Tastatur
   const keyRef = useRef(null);
   keyRef.current = (e) => {
-    if (!C || mode === "edit" || e.target.closest?.("input, textarea, select")) return;
+    if (!C || mode === "edit" || quiz || e.target.closest?.("input, textarea, select")) return;
     if (e.key === " ") { e.preventDefault(); mode === "player" ? playAll() : playback.toggle(); }
     else if (e.key === "ArrowRight") stepNext();
     else if (e.key === "ArrowLeft") playback.seek(prevBoundary());
@@ -177,8 +230,9 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
     );
   }
 
-  const diagram = C && showPaths ? beatDiagram(C, mode === "player" ? displayBeat : frame.beatIndex) : null;
-  const camera = mode === "player" ? playerInfo?.camera : coachCamera;
+  const diagram = C && showPaths && !quiz ? beatDiagram(C, mode === "player" ? displayBeat : frame.beatIndex) : null;
+  const camera = quiz ? quizCamera : mode === "player" ? playerInfo?.camera : coachCamera;
+  const replayBeat = () => { const b = C.beats[frame.beatIndex]; playback.seek(b.t0); playback.playTo(b.t1); };
 
   return (
     <div style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", background: C_UI.bg, color: C_UI.text,
@@ -193,7 +247,7 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
           <div style={{ fontWeight: 800, fontSize: 16, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{play.name}</div>
           {origin === "shared" && <div style={{ fontSize: 11.5, color: C_UI.warn }}>Geteilter Spielzug</div>}
         </div>
-        <Segmented label="Ansicht" value={mode} onChange={(m) => { if (m === "player") setAnswered({}); setMode(m); setTool(null); }}
+        <Segmented label="Ansicht" value={mode} onChange={(m) => { if (m === "player") setAnswered({}); setQuiz(null); setMode(m); setTool(null); }}
           options={[
             { value: "coach", label: "Trainer" },
             { value: "player", label: "Spielerin" },
@@ -249,7 +303,7 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
         <CourtStage courtType={play.court} camera={camera} onCourtDown={onDown} onCourtMove={onMove} onCourtUp={onUp}
           onGestureStart={() => { stroke.current = null; }}>
           <AnalysisContext.Provider value={C}>
-            <PlayScene frame={frame} diagram={diagram} showDef={showDef} player={sceneInfo}
+            <PlayScene frame={quizFrame ?? frame} diagram={diagram} showDef={showDef} player={quiz ? quizScene : sceneInfo}
               analysis={mode === "coach" && showAnalysis ? analysis : null} />
           </AnalysisContext.Provider>
           <g pointerEvents="none">
@@ -263,7 +317,8 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
       ) : <div style={{ flex: 1 }} />}
 
       {/* ===== Unten ===== */}
-      <div style={panelStyle(wide, C_UI.line, C_UI.panel, mode === "player" ? "52vh" : "46vh")}>
+      <div style={{ ...panelStyle(wide, C_UI.line, C_UI.panel, mode === "player" ? "50vh" : "46vh"),
+        ...(mode === "player" && me ? { display: "flex", flexDirection: "column", overflowY: "hidden" } : {}) }}>
         {C && mode === "coach" && (
           <>
             <VariantBar decisions={C.play.variant.decisions} choices={choices} onChoose={chooseCoach} />
@@ -284,39 +339,52 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
 
         {C && mode === "player" && (
           !me ? (
-            <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ display: "grid", gap: 12 }}>
               <div style={{ fontSize: 17, fontWeight: 800 }}>Wähle deine Position</div>
-              <div style={{ fontSize: 13.5, color: C_UI.muted }}>Du siehst den Spielzug aus deiner Rolle: deine Aufgabe, dein Signal und wohin du läufst.</div>
+              <HowTo />
               <RolePicker C={C} me={me} onPick={(id) => { setMe(id); playback.seek(0); }} />
             </div>
           ) : (
-            <div style={{ display: "grid", gap: 10 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <RolePicker C={C} me={me} onPick={setMe} compact />
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 0, flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                <RolePicker C={C} me={me} onPick={(id) => { setMe(id); setQuiz(null); }} compact />
                 <span style={{ flex: 1 }} />
-                <IconButton active={playerCam} onClick={() => setPlayerCam((v) => !v)} title="Kamera folgt dir (aus = ganzes Feld)">◎</IconButton>
+                <IconButton onClick={() => setHelp(true)} title="Hilfe und Legende" style={{ height: 44, minWidth: 44 }}>?</IconButton>
               </div>
-              {pending ? (
-                <DecisionCard C={C} decision={pending.decision} chosen={choices[pending.decision.id]} onChoose={(o) => choose(pending.decision.id, o)} />
-              ) : (
-                <>
-                  {decisions.filter((d) => answered[d.decision.id] && displayBeat >= d.atBeat).map((d) => (
-                    <div key={d.decision.id} style={{ fontSize: 13, color: C_UI.muted, lineHeight: 1.4, padding: "6px 8px", borderRadius: 8, background: "rgba(255,209,102,0.08)" }}>
-                      <Chip tone="rgba(255,209,102,0.18)" ink="#FFE9B3">Read</Chip> <strong style={{ color: C_UI.text }}>{d.option.label}</strong>
-                      {d.option.answer && <div style={{ color: C_UI.open }}>Lösung: {d.option.answer}</div>}
-                    </div>
-                  ))}
-                  {playerInfo && <TaskCard C={C} role={playerInfo.role} beat={C.beats[displayBeat].beat} beatIndex={displayBeat}
-                    total={C.beats.length} frameBeatTitle={C.beats[displayBeat].beat.title} />}
-                </>
-              )}
-              <PlayerControls time={time} total={C.total} playing={playback.playing}
-                onPrev={() => playback.seek(prevBoundary())} onNext={stepNext} onToggle={playAll} onSeek={playback.seek}
-                moments={moments} boundaries={bounds} decisionTimes={decisions} atEnd={atEnd || !!pending} />
-              {atEnd && (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <IconButton onClick={() => { setAnswered({}); playback.seek(0); }} title="Von vorn">↺ Von vorn</IconButton>
-                  {decisions.length > 0 && <IconButton onClick={otherVariant} title="Andere Variante ansehen">Andere Variante ansehen</IconButton>}
+              <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", display: "grid", gap: 10, alignContent: "start" }}>
+                {quiz ? (
+                  <QuizCard C={C} decision={quiz.d.decision} phase={quiz.phase} secret={quiz.secret} picked={quiz.picked}
+                    answerOf={quizAnswer} onPick={answerQuiz} onReplay={replayQuiz}
+                    onContinue={() => chooseFromQuiz(quiz.d, quiz.secret.id)} />
+                ) : pending ? (
+                  <DecisionCard C={C} decision={pending.decision} chosen={choices[pending.decision.id]}
+                    onChoose={(o) => choose(pending.decision.id, o)}
+                    onPractice={pending.decision.options.length > 1 ? () => startQuiz(pending) : null} />
+                ) : (
+                  <>
+                    {decisions.filter((d) => answered[d.decision.id] && displayBeat >= d.atBeat).map((d) => (
+                      <div key={d.decision.id} style={{ fontSize: 13, color: C_UI.muted, lineHeight: 1.4, padding: "6px 8px", borderRadius: 8, background: "rgba(255,209,102,0.08)" }}>
+                        <Chip tone="rgba(255,209,102,0.18)" ink="#FFE9B3">Read</Chip> <strong style={{ color: C_UI.text }}>{d.option.label}</strong>
+                        {d.option.answer && <div style={{ color: C_UI.open }}>Lösung: {d.option.answer}</div>}
+                      </div>
+                    ))}
+                    {playerInfo && <TaskCard C={C} role={playerInfo.role} beat={C.beats[displayBeat].beat} beatIndex={displayBeat}
+                      total={C.beats.length} frameBeatTitle={C.beats[displayBeat].beat.title} />}
+                    {atEnd && (
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <IconButton onClick={() => { setAnswered({}); playback.seek(0); }} title="Von vorn">↺ Von vorn</IconButton>
+                        {decisions.length > 0 && <IconButton onClick={otherVariant} title="Andere Variante ansehen">Andere Variante ansehen</IconButton>}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+              {!quiz && (
+                <div style={{ flexShrink: 0 }}>
+                  <PlayerControls time={time} total={C.total} playing={playback.playing}
+                    onPrev={() => playback.seek(prevBoundary())} onNext={stepNext} onToggle={playAll} onSeek={playback.seek}
+                    onReplay={replayBeat} slow={playback.speed < 1} onSlow={() => playback.setSpeed(playback.speed < 1 ? 1 : 0.5)}
+                    moments={moments} boundaries={bounds} decisionTimes={decisions} atEnd={atEnd || !!pending} />
                 </div>
               )}
             </div>
@@ -327,6 +395,12 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
       </div>
 
       {sharing && <ShareSheet play={play} onClose={() => setSharing(false)} />}
+      {help && (
+        <Dialog title="So liest du das Feld" onClose={() => setHelp(false)} actions={[
+          { label: playerCam ? "Ganzes Feld zeigen" : "Kamera folgt mir", onClick: () => setPlayerCam((v) => !v) },
+          { label: "Verstanden", primary: true, onClick: () => setHelp(false) },
+        ]}><Legend /></Dialog>
+      )}
     </div>
   );
 }

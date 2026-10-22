@@ -6,6 +6,14 @@ import { C_UI, Chip, Dialog } from "../studio/studioUi.jsx";
 import { OFF_COLOR, DEF_COLOR } from "../court/constants.js";
 import { validatePlayTree, allChoicePaths } from "../play/index.js";
 import { storageInfo } from "../store/playStore.js";
+import { loadReadLog, readLogCsv, clearReadLog } from "../store/readLog.js";
+
+function downloadText(text, filename, type) {
+  const url = URL.createObjectURL(new Blob(["\uFEFF" + text], { type }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: filename });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 const dateFmt = (ms) => new Date(ms).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
@@ -68,6 +76,8 @@ export default function Home({
 }) {
   const [more, setMore] = useState(null);
   const [store, setStore] = useState(null);
+  const [readLog, setReadLog] = useState(loadReadLog);
+  const [askReset, setAskReset] = useState(false);
   useEffect(() => { storageInfo().then(setStore); }, [myPlays.length]);
 
   const section = { display: "grid", gap: 10 };
@@ -139,6 +149,19 @@ export default function Home({
           ))}
         </section>
 
+        {readLog.length > 0 && (
+          <section style={{ ...section, gap: 6 }} aria-label="Read-Training">
+            <h2 style={h2}>Read-Training</h2>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 14, color: C_UI.muted }}>
+              <span style={{ flex: "1 1 220px" }}>
+                {readLog.length} Antwort{readLog.length === 1 ? "" : "en"} auf diesem Gerät, davon {readLog.filter((e) => e.correct).length} richtig.
+              </span>
+              <button style={action(false)} onClick={() => downloadText(readLogCsv(readLog), `read-training-${new Date().toISOString().slice(0, 10)}.csv`, "text/csv")}>Als Tabelle herunterladen</button>
+              <button style={action(false)} onClick={() => setAskReset(true)}>Zurücksetzen</button>
+            </div>
+          </section>
+        )}
+
         <footer style={{ fontSize: 13, color: C_UI.dim, lineHeight: 1.5 }}>
           Deine Spielzüge sind nur auf diesem Gerät gespeichert (kein Konto, kein Server).
           {myPlays.length > 0 && " Lade regelmäßig eine Sicherung herunter, besonders vor einem Gerätewechsel."}
@@ -146,6 +169,12 @@ export default function Home({
         </footer>
       </div>
 
+      {askReset && (
+        <Dialog title="Read-Training zurücksetzen?" onClose={() => setAskReset(false)} actions={[
+          { label: "Abbrechen", onClick: () => setAskReset(false) },
+          { label: "Zurücksetzen", danger: true, onClick: () => { clearReadLog(); setReadLog([]); setAskReset(false); } },
+        ]}>Alle gespeicherten Antworten auf diesem Gerät werden gelöscht. Tipp: Vorher als Tabelle herunterladen.</Dialog>
+      )}
       {more && (
         <Dialog title={more.name} onClose={() => setMore(null)} actions={[
           { label: "Duplizieren", onClick: () => { onDuplicate(more); setMore(null); } },

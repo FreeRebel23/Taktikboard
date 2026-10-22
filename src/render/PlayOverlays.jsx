@@ -9,9 +9,17 @@ const pathD = (pts) => pts.map((p, i) => `${i ? "L" : "M"} ${p.x.toFixed(2)} ${p
 
 /** Beschriftung, immer aufrecht. anchor "start"/"end": x ist die linke/rechte Kante (Bildschirm). */
 export function Pill({ x, y, text, color, ink = "#16110C", size = 4.2, anchor = "middle" }) {
-  const { textRot } = useView();
+  const { textRot, landscape, visible } = useView();
   const w = text.length * size * 0.68 + 4; // fette Versalien
   const x0 = anchor === "start" ? 0 : anchor === "end" ? -w : -w / 2;
+  // Im sichtbaren Ausschnitt halten (Kamera-Zoom, Feldrand) – sonst wird die Beschriftung abgeschnitten
+  if (visible) {
+    const m = 1, h = size * 0.8;
+    const clamp = (v, lo, hi) => (lo > hi ? v : Math.max(lo, Math.min(hi, v)));
+    // Textrichtung: hochkant entlang Court-x, quer entlang Court-y
+    if (landscape) { y = clamp(y, visible.y0 - x0 + m, visible.y1 - x0 - w - m); x = clamp(x, visible.x0 + h + m, visible.x1 - h - m); }
+    else { x = clamp(x, visible.x0 - x0 + m, visible.x1 - x0 - w - m); y = clamp(y, visible.y0 + h + m, visible.y1 - h - m); }
+  }
   return (
     <g transform={`translate(${x},${y}) rotate(${textRot})`} pointerEvents="none">
       <rect x={x0} y={-size * 0.8} width={w} height={size * 1.6} rx={size * 0.8} fill={color} />

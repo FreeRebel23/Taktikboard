@@ -7,11 +7,12 @@ import { OFF_COLOR, DEF_COLOR } from "../court/constants.js";
 
 const who = (C, id) => (id === "ball" ? "den Ball" : C.entity[id]?.label ?? id);
 
-/** Auswahl "Wer bist du?" – groß und tippfreundlich */
+/** Auswahl "Wer bist du?" – groß und tippfreundlich (mind. 44 px) */
 export function RolePicker({ C, me, onPick, compact = false }) {
   const [team, setTeam] = useState(me && C.entity[me]?.team === "defense" ? "defense" : "offense");
   const ids = C.ids.filter((id) => C.entity[id].team === team);
   const color = team === "offense" ? OFF_COLOR : DEF_COLOR;
+  const size = compact ? 44 : 52;
   return (
     <div>
       {!compact && <Label>Wer bist du?</Label>}
@@ -21,18 +22,58 @@ export function RolePicker({ C, me, onPick, compact = false }) {
           return (
             <button key={id} onClick={() => onPick(id)} aria-pressed={on} title={`Ich bin ${C.entity[id].label}`}
               style={{
-                width: compact ? 38 : 48, height: compact ? 38 : 48, borderRadius: 999, cursor: "pointer",
+                width: size, height: size, borderRadius: 999, cursor: "pointer", padding: 0,
                 border: `2px solid ${on ? C_UI.white : color}`, background: on ? color : "transparent",
-                color: on ? "#16110C" : C_UI.text, fontFamily: "inherit", fontWeight: 800, fontSize: compact ? 13 : 16,
+                color: on ? "#16110C" : C_UI.text, fontFamily: "inherit", fontWeight: 800, fontSize: compact ? 15 : 17,
               }}>{C.entity[id].label}</button>
           );
         })}
         <button onClick={() => setTeam(team === "offense" ? "defense" : "offense")}
+          title={team === "offense" ? "Positionen der Verteidigung zeigen" : "Positionen des Angriffs zeigen"}
           style={{
-            marginLeft: 4, padding: "6px 10px", borderRadius: 8, border: `1px solid ${C_UI.border}`, background: "transparent",
-            color: C_UI.muted, fontFamily: "inherit", fontWeight: 700, fontSize: 12, cursor: "pointer",
-          }}>{team === "offense" ? "Verteidigung →" : "← Angriff"}</button>
+            minHeight: 44, minWidth: 44, padding: compact ? "0 8px" : "0 12px", borderRadius: 10, border: `1px solid ${C_UI.border}`, background: "transparent",
+            color: C_UI.muted, fontFamily: "inherit", fontWeight: 800, fontSize: 13, cursor: "pointer",
+          }}>{compact ? "⇄" : team === "offense" ? "Verteidigung →" : "← Angriff"}</button>
       </div>
+    </div>
+  );
+}
+
+/** Kurze Anleitung beim ersten Öffnen (Positionswahl) */
+export function HowTo() {
+  const row = (n, text) => (
+    <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+      <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 10, background: C_UI.accent, color: "#16110C", fontWeight: 800, fontSize: 12, display: "grid", placeItems: "center" }}>{n}</span>
+      <span>{text}</span>
+    </div>
+  );
+  return (
+    <div style={{ display: "grid", gap: 6, fontSize: 14, lineHeight: 1.4, color: C_UI.muted }}>
+      {row(1, "Tippe deine Nummer an.")}
+      {row(2, <>Mit <strong style={{ color: C_UI.text }}>▶ Weiter</strong> siehst du den Spielzug Schritt für Schritt – mit deiner Aufgabe.</>)}
+      {row(3, <>Bei <strong style={{ color: C_UI.warn }}>Read</strong> entscheidest du selbst: Schau, was die Verteidigung macht.</>)}
+    </div>
+  );
+}
+
+/** Legende: was bedeuten die Zeichen auf dem Feld und die Knöpfe? */
+export function Legend() {
+  const row = (sym, text) => (
+    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+      <span style={{ flexShrink: 0, width: 34, textAlign: "center", fontWeight: 800 }}>{sym}</span>
+      <span style={{ fontSize: 14, lineHeight: 1.35 }}>{text}</span>
+    </div>
+  );
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      {row(<span style={{ fontSize: 11, background: "#fff", color: "#111", borderRadius: 6, padding: "1px 4px" }}>DU</span>, "Das bist du (weiß umrandet).")}
+      {row(<span style={{ fontSize: 11, background: C_UI.accent, color: "#111", borderRadius: 6, padding: "1px 4px" }}>ZIEL</span>, "Heller Schatten: Dorthin läufst du in diesem Schritt.")}
+      {row("- ◉ -", "Gestrichelte Linie mit Auge: Darauf achtest du.")}
+      {row(<span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 5, background: "#fff" }} />, "Weißer Punkt auf der Zeitleiste: Hier bist du dran.")}
+      {row(<span style={{ display: "inline-block", width: 9, height: 9, transform: "rotate(45deg)", background: C_UI.warn }} />, "Gelbe Raute: Read – hier entscheidest du.")}
+      {row("◀ ↻", "Einen Schritt zurück · den letzten Schritt nochmal zeigen.")}
+      {row("🐢", "Zeitlupe: alles halb so schnell.")}
+      {row("▶▶", "Bis zum nächsten Read (oder bis zum Ende) abspielen.")}
     </div>
   );
 }
@@ -80,7 +121,7 @@ export function TaskCard({ C, role, beat, beatIndex, total, frameBeatTitle }) {
       {(role.why || beat.text) && (
         <div>
           <button onClick={() => setWhy((v) => !v)} aria-expanded={why} style={{
-            background: "none", border: "none", padding: 0, color: C_UI.accent, fontFamily: "inherit",
+            background: "none", border: "none", padding: "0 12px 0 0", minHeight: 44, color: C_UI.accent, fontFamily: "inherit",
             fontWeight: 800, fontSize: 13, cursor: "pointer",
           }}>{why ? "▾" : "▸"} Warum?</button>
           {why && (
@@ -95,8 +136,10 @@ export function TaskCard({ C, role, beat, beatIndex, total, frameBeatTitle }) {
   );
 }
 
-/** Read-Karte am Entscheidungspunkt: Beobachtung → Lösung */
-export function DecisionCard({ C, decision, onChoose, chosen }) {
+/** Read-Karte am Entscheidungspunkt: Read üben (Verteidigung ansehen → entscheiden)
+ *  oder eine Variante direkt ansehen */
+export function DecisionCard({ C, decision, onChoose, chosen, onPractice }) {
+  const [browse, setBrowse] = useState(!onPractice);
   return (
     <div style={{ display: "grid", gap: 8 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -107,46 +150,111 @@ export function DecisionCard({ C, decision, onChoose, chosen }) {
       {decision.watch?.length > 0 && (
         <div style={{ fontSize: 13.5, color: C_UI.muted }}>Schau auf <strong style={{ color: C_UI.text }}>{decision.watch.map((w) => who(C, w)).join(", ")}</strong> – was siehst du?</div>
       )}
-      <div style={{ display: "grid", gap: 6 }}>
-        {decision.options.map((o, i) => (
-          <button key={o.id} onClick={() => onChoose(o.id)} style={{
-            textAlign: "left", padding: "10px 12px", borderRadius: 12, cursor: "pointer", fontFamily: "inherit",
-            border: `1.5px solid ${chosen === o.id ? C_UI.accent : C_UI.border}`, background: C_UI.card, color: C_UI.text,
-          }}>
-            <div style={{ fontSize: 15, fontWeight: 800 }}>{String.fromCharCode(65 + i)} · {o.label}</div>
-            {o.read && <div style={{ fontSize: 13, color: C_UI.muted, marginTop: 2 }}>Du siehst: {o.read}</div>}
-            <div style={{ fontSize: 12.5, color: C_UI.accent, marginTop: 4, fontWeight: 700 }}>Das sehe ich → Lösung zeigen</div>
-          </button>
-        ))}
+      {onPractice && (
+        <button onClick={onPractice} style={{
+          minHeight: 48, borderRadius: 12, border: "none", cursor: "pointer", background: C_UI.warn, color: "#16110C",
+          fontFamily: "inherit", fontWeight: 800, fontSize: 16,
+        }}>▶ Verteidigung ansehen und entscheiden</button>
+      )}
+      {onPractice && (
+        <button onClick={() => setBrowse((v) => !v)} aria-expanded={browse} style={{
+          justifySelf: "start", minHeight: 44, background: "none", border: "none", padding: 0, color: C_UI.muted,
+          fontFamily: "inherit", fontWeight: 700, fontSize: 13.5, cursor: "pointer",
+        }}>{browse ? "▾" : "▸"} Oder eine Variante direkt ansehen</button>
+      )}
+      {browse && (
+        <div style={{ display: "grid", gap: 6 }}>
+          {decision.options.map((o, i) => (
+            <button key={o.id} onClick={() => onChoose(o.id)} style={{
+              textAlign: "left", padding: "10px 12px", borderRadius: 12, cursor: "pointer", fontFamily: "inherit",
+              border: `1.5px solid ${chosen === o.id ? C_UI.accent : C_UI.border}`, background: C_UI.card, color: C_UI.text,
+            }}>
+              <div style={{ fontSize: 15, fontWeight: 800 }}>{String.fromCharCode(65 + i)} · {o.label}</div>
+              {o.read && <div style={{ fontSize: 13, color: C_UI.muted, marginTop: 2 }}>Du siehst: {o.read}</div>}
+              <div style={{ fontSize: 12.5, color: C_UI.accent, marginTop: 4, fontWeight: 700 }}>Das sehe ich → Lösung zeigen</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Read-Training: zuschauen → entscheiden → Rückmeldung */
+export function QuizCard({ C, decision, phase, secret, picked, onPick, onReplay, onContinue, answerOf }) {
+  const right = picked === secret.id;
+  const watch = decision.watch?.length ? decision.watch.map((w) => who(C, w)).join(", ") : "die Verteidigung";
+  return (
+    <div style={{ display: "grid", gap: 8 }} aria-live="polite">
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <Chip tone={C_UI.warn} ink="#16110C">Read-Training</Chip>
+        <span style={{ fontWeight: 800, fontSize: 14 }}>{decision.title}</span>
       </div>
+      {phase === "watch" && (
+        <div style={{ fontSize: 17, fontWeight: 700, lineHeight: 1.35 }}>Schau genau auf <span style={{ color: C_UI.warn }}>{watch}</span> …</div>
+      )}
+      {phase === "ask" && (
+        <>
+          <div style={{ fontSize: 17, fontWeight: 700, lineHeight: 1.35 }}>Was machst du jetzt?</div>
+          <div style={{ display: "grid", gap: 6 }}>
+            {decision.options.map((o, i) => (
+              <button key={o.id} onClick={() => onPick(o.id)} style={{
+                textAlign: "left", padding: "12px", minHeight: 48, borderRadius: 12, cursor: "pointer", fontFamily: "inherit",
+                border: `1.5px solid ${C_UI.border}`, background: C_UI.card, color: C_UI.text, fontSize: 15, fontWeight: 800,
+              }}>{String.fromCharCode(65 + i)} · {answerOf(o)}</button>
+            ))}
+          </div>
+          <button onClick={onReplay} style={{ justifySelf: "start", minHeight: 44, background: "none", border: "none", padding: 0, color: C_UI.muted, fontFamily: "inherit", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>↻ Nochmal ansehen</button>
+        </>
+      )}
+      {phase === "done" && (
+        <>
+          <div role="status" style={{ fontSize: 18, fontWeight: 800, color: right ? C_UI.open : "#FFB4A8" }}>
+            {right ? "✓ Richtig gelesen!" : "✗ Nicht ganz."}
+          </div>
+          <div style={{ fontSize: 14.5, lineHeight: 1.45 }}>
+            <div><span style={{ color: C_UI.muted }}>Die Verteidigung:</span> {secret.label}</div>
+            {secret.read && <div style={{ color: C_UI.muted }}>{secret.read}</div>}
+            <div style={{ marginTop: 4, color: C_UI.open, fontWeight: 700 }}>Lösung: {answerOf(secret)}</div>
+          </div>
+          <button onClick={onContinue} style={{
+            minHeight: 48, borderRadius: 12, border: "none", cursor: "pointer", background: C_UI.accent, color: "#16110C",
+            fontFamily: "inherit", fontWeight: 800, fontSize: 16,
+          }}>▶ Lösung ansehen</button>
+        </>
+      )}
     </div>
   );
 }
 
 /** Schrittsteuerung für Spielerinnen: groß, wenige Knöpfe, eigene Momente auf der Zeitleiste */
-export function PlayerControls({ time, total, playing, onPrev, onNext, onToggle, onSeek, moments, boundaries, decisionTimes, atEnd }) {
+export function PlayerControls({ time, total, playing, onPrev, onNext, onToggle, onSeek, onReplay, slow, onSlow, moments, boundaries, decisionTimes, atEnd }) {
+  const pos = (t) => `calc(${(t / total) * 100}% + ${8 - (t / total) * 16}px)`;
+  const small = { height: 46, minWidth: 46, padding: "0 6px", fontSize: 17 };
   return (
     <div style={{ display: "grid", gap: 8 }}>
       <div style={{ position: "relative", height: 22 }}>
         <input type="range" min="0" max={total} step="0.001" value={time} aria-label="Zeitleiste"
           onChange={(e) => onSeek(parseFloat(e.target.value))} style={{ width: "100%", margin: 0, position: "absolute", top: 4 }} />
         {boundaries.slice(1, -1).map((b) => (
-          <span key={`b${b}`} style={{ position: "absolute", left: `calc(${(b / total) * 100}% + ${8 - (b / total) * 16}px)`, top: 5, width: 2, height: 12, marginLeft: -1, background: "#E8E4DA", opacity: 0.45, pointerEvents: "none" }} />
+          <span key={`b${b}`} style={{ position: "absolute", left: pos(b), top: 5, width: 2, height: 12, marginLeft: -1, background: "#E8E4DA", opacity: 0.45, pointerEvents: "none" }} />
         ))}
         {moments.map((m, i) => (
-          <span key={`m${i}`} title="Hier bist du dran" style={{ position: "absolute", left: `calc(${(m.t / total) * 100}% + ${8 - (m.t / total) * 16}px)`, top: -1, width: 8, height: 8, marginLeft: -4, borderRadius: 4, background: C_UI.white, pointerEvents: "none" }} />
+          <span key={`m${i}`} title="Hier bist du dran" style={{ position: "absolute", left: pos(m.t), top: -1, width: 8, height: 8, marginLeft: -4, borderRadius: 4, background: C_UI.white, pointerEvents: "none" }} />
         ))}
         {decisionTimes.map((d) => (
-          <span key={`d${d.t}`} title="Read" style={{ position: "absolute", left: `calc(${(d.t / total) * 100}% + ${8 - (d.t / total) * 16}px)`, top: 14, width: 9, height: 9, marginLeft: -4.5, transform: "rotate(45deg)", background: C_UI.warn, pointerEvents: "none" }} />
+          <span key={`d${d.t}`} title="Read" style={{ position: "absolute", left: pos(d.t), top: 14, width: 9, height: 9, marginLeft: -4.5, transform: "rotate(45deg)", background: C_UI.warn, pointerEvents: "none" }} />
         ))}
       </div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <IconButton onClick={onPrev} title="Schritt zurück" style={{ height: 46, minWidth: 54, fontSize: 18 }}>◀</IconButton>
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <IconButton onClick={onPrev} title="Schritt zurück" style={small}>◀</IconButton>
+        <IconButton onClick={onReplay} title="Schritt nochmal" style={small}>↻</IconButton>
         <button onClick={onNext} disabled={atEnd} style={{
-          flex: 1, height: 46, borderRadius: 12, border: "none", cursor: atEnd ? "default" : "pointer",
+          flex: 1, minWidth: 0, height: 46, borderRadius: 12, border: "none", cursor: atEnd ? "default" : "pointer",
           background: C_UI.accent, color: "#16110C", fontFamily: "inherit", fontWeight: 800, fontSize: 16, opacity: atEnd ? 0.5 : 1,
         }}>{playing ? "läuft …" : "▶ Weiter"}</button>
-        <IconButton onClick={onToggle} title={playing ? "Pause" : "Alles abspielen"} style={{ height: 46, minWidth: 54 }}>{playing ? "❚❚" : "▶▶"}</IconButton>
+        <IconButton active={slow} onClick={onSlow} title={slow ? "Normale Geschwindigkeit" : "Zeitlupe"} style={small}>🐢</IconButton>
+        <IconButton onClick={onToggle} title={playing ? "Pause" : "Alles abspielen"} style={small}>{playing ? "❚❚" : "▶▶"}</IconButton>
       </div>
     </div>
   );

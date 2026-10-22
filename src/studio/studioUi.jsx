@@ -65,7 +65,7 @@ export function Dialog({ title, children, actions, onClose }) {
     <div role="dialog" aria-modal="true" aria-label={title} onClick={onClose}
       style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(0,0,0,0.6)", display: "grid", placeItems: "center", padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} style={{
-        width: "min(440px, 100%)", background: C_UI.panel, border: `1px solid ${C_UI.border}`, borderRadius: 14,
+        width: "min(440px, 100%)", maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: C_UI.panel, border: `1px solid ${C_UI.border}`, borderRadius: 14,
         padding: 16, display: "grid", gap: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
       }}>
         <div style={{ fontWeight: 800, fontSize: 17 }}>{title}</div>
@@ -73,7 +73,7 @@ export function Dialog({ title, children, actions, onClose }) {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {actions.map((a) => (
             <button key={a.label} onClick={a.onClick} autoFocus={a.primary} style={{
-              padding: "10px 14px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
+              padding: "10px 14px", minHeight: 44, borderRadius: 10, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
               border: `1px solid ${a.danger ? C_UI.trap : a.primary ? C_UI.accent : C_UI.border}`,
               background: a.primary ? C_UI.accent : a.danger ? "rgba(224,70,58,0.14)" : "#232B32",
               color: a.primary ? "#16110C" : a.danger ? "#FFB4A8" : C_UI.text,
