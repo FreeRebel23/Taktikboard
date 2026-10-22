@@ -129,3 +129,13 @@ test("Neuen, nie gespeicherten Spielzug verwerfen führt zurück zur Übersicht,
   await expect(page.getByText("Ungesicherte Entwürfe")).toHaveCount(0);
   noErrors();
 });
+
+test("Letzte Änderung geht auch bei sofortigem Neuladen nicht verloren", async ({ page }) => {
+  await newFromTemplate(page, "Sofort-Test");
+  await addCutAndPass(page);
+  page.on("dialog", (d) => d.accept());
+  await page.reload();                       // ohne auf die automatische Sicherung zu warten
+  await page.getByRole("button", { name: "Weiter bearbeiten" }).click();
+  await page.getByTitle("Beat 1").click();
+  await expect(page.getByText("Aktionen in diesem Beat (2)")).toBeVisible();
+});

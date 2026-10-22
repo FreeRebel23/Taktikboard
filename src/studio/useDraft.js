@@ -31,7 +31,11 @@ export default function useDraft(initial, { savedSnapshot }) {
   const draft = h.present;
   const json = JSON.stringify(draft);
   const dirty = json !== saved;
-  const markSaved = (play) => setSaved(JSON.stringify(play));
+  const latest = useRef(null);           // ungesicherter Stand für die Sofort-Sicherung
+  const markSaved = (play) => { latest.current = null; setSaved(JSON.stringify(play)); };
+  /** Entwurf bewusst verwerfen: keine Sofort-Sicherung mehr beim Verlassen */
+  const forget = () => { latest.current = null; forgotten.current = true; };
+  const forgotten = useRef(false);
 
   // Entwurf automatisch sichern (kurz nach der letzten Änderung)
   useEffect(() => {
@@ -43,6 +47,23 @@ export default function useDraft(initial, { savedSnapshot }) {
     return () => clearTimeout(t);
   }, [json, dirty]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Sofort sichern, wenn die Seite verlassen/versteckt wird (App-Wechsel auf iOS beendet
+  // Tabs ohne Vorwarnung) – sonst ginge die letzte Änderung im 400-ms-Fenster verloren.
+  latest.current = dirty && !forgotten.current ? draft : null;
+  useEffect(() => {
+    const flush = () => { if (latest.current) saveDraft(latest.current); };
+    const onVis = () => { if (document.visibilityState === "hidden") flush(); };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      flush(); // auch beim Verlassen des Builders innerhalb der App
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
+
   // Browser-Warnung beim Schließen/Neuladen mit ungespeicherten Änderungen
   useEffect(() => {
     if (!dirty) return;
@@ -52,7 +73,7 @@ export default function useDraft(initial, { savedSnapshot }) {
   }, [dirty]);
 
   return {
-    draft, change, endMerge, undo, redo, replace, dirty, markSaved, draftStatus,
+    draft, change, endMerge, undo, redo, replace, dirty, markSaved, forget, draftStatus,
     canUndo: h.past.length > 0, canRedo: h.future.length > 0,
   };
 }

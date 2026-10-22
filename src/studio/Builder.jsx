@@ -211,13 +211,13 @@ export default function Builder({ play, origin, onDone, onSave }) {
   // Nie gespeicherter neuer Spielzug/Entwurf: Verwerfen führt zurück zur Übersicht
   const unsavedNew = () => (origin === "new" || origin === "draft") && !findMyPlay(draft.id);
   const leave = () => {
-    if (!D.dirty) { clearDraft(draft.id); onDone(unsavedNew() ? null : draft, { close: unsavedNew() }); return; }
+    if (!D.dirty) { D.forget(); clearDraft(draft.id); onDone(unsavedNew() ? null : draft, { close: unsavedNew() }); return; }
     setDialog({
       title: "Ungespeicherte Änderungen",
       text: "Du hast Änderungen, die noch nicht gespeichert sind.",
       actions: [
         { label: "Weiter bearbeiten", onClick: () => setDialog(null) },
-        { label: "Verwerfen", danger: true, onClick: () => { const close = unsavedNew(); clearDraft(draft.id); setDialog(null); onDone(close ? null : lastSaved.current, { close }); } },
+        { label: "Verwerfen", danger: true, onClick: () => { const close = unsavedNew(); D.forget(); clearDraft(draft.id); setDialog(null); onDone(close ? null : lastSaved.current, { close }); } },
         { label: "Speichern", primary: true, onClick: () => { const r = save(); setDialog(null); if (r?.ok) onDone(r.play); } },
       ],
     });
