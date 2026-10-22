@@ -2,7 +2,11 @@ import { test } from "node:test";
 import { validatePlay, holderTimeline } from "../src/play/model.js";
 import assert from "node:assert/strict";
 import { compilePlay, sampleFrame, beatBoundaries, beatDiagram, trapSlots, TRAP_RADIUS } from "../src/play/engine.js";
-import { pressBreak } from "../src/play/plays/pressBreak.js";
+import { pressBreak as tree } from "../src/play/plays/pressBreak.js";
+import { resolveVariant } from "../src/play/variants.js";
+
+// Variante A: X3 stellt den Rückpass zu (Lob zur 5)
+const pressBreak = resolveVariant(tree, { x3: "x3_zu" });
 import { distToSegment, dist, angleDiff } from "../src/play/vec.js";
 
 const C = compilePlay(pressBreak);

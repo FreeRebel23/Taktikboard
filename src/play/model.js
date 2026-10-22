@@ -24,6 +24,16 @@ import { ACTIONS, actorsOf, actionWindow } from "./actions.js";
 
 const EPS = 1e-6;
 
+/** Körperhaltungen für Coaching (Zielmarke im Spielerinnen-Modus) */
+export const STANCES = {
+  open: "Offen: Brust zum Ball, Korb im Augenwinkel",
+  triple: "Triple Threat: Ball an der Hüfte, Blick nach vorne",
+  protect: "Ball schützen: Ball hoch, Ellbogen raus, pivotieren",
+  defense: "Verteidigungsstellung: breite Füße, tief, Hände aktiv",
+  deny: "Deny: Hand und Fuß in der Passlinie",
+  screen: "Block: breit, stabil, Arme vor dem Körper",
+};
+
 export const teamOf = (play, id) => play.entities.find((e) => e.id === id)?.team;
 
 export function beatIndexById(play, id) {
@@ -116,6 +126,12 @@ export function validatePlay(play) {
       if (start < lastEnd - EPS) errors.push(`${where}: Pässe überlappen zeitlich`);
       lastEnd = end;
       holder = p.to;
+    }
+
+    for (const [pid, r] of Object.entries(beat.roles ?? {})) {
+      if (!ids.has(pid)) errors.push(`${where}: Coaching für unbekannte Spielerin "${pid}"`);
+      if (r.watch && r.watch !== "ball" && typeof r.watch === "string" && !ids.has(r.watch)) errors.push(`${where}: "${pid}" beobachtet unbekannte Spielerin "${r.watch}"`);
+      if (r.stance && !STANCES[r.stance]) warnings.push(`${where}: unbekannte Haltung "${r.stance}" bei "${pid}"`);
     }
 
     for (const f of beat.focus ?? []) {
