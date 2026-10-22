@@ -15,6 +15,7 @@
 import { ACTIONS, actionWindow } from "./actions.js";
 import { PROFILES, clamp01 } from "./easing.js";
 import { buildPath, pointOnPath } from "./path.js";
+import { passKind, beatsHands, flightHeight } from "./ballFlight.js";
 import { validatePlay, holderTimeline, passesOf, beatIndexById, teamOf } from "./model.js";
 import {
   add, sub, scale, norm, lerp, dist, len, angleOf, fromAngle, angleDiff,
@@ -163,7 +164,10 @@ function beatEvaluator(C, b) {
     const H = C.hoop;
     switch (a.type) {
       case "guard":
+      case "switch": // Übernahme: ab jetzt Korbseite der neuen Gegenspielerin
         return add(T, scale(norm(sub(H, T)), a.distance ?? 8));
+      case "closeout": // eng heran, Hände hoch gegen den Wurf
+        return add(T, scale(norm(sub(H, T)), a.distance ?? 5.5));
       case "deny": {
         const B = ballGround(u);
         return add(add(T, scale(norm(sub(B, T)), a.distance ?? 9)), scale(norm(sub(H, T)), 1.5));
@@ -299,7 +303,9 @@ function makeSampler(C) {
     const ph = s.ev.ballPhase(s.u);
     const hasBall = (ph.state === "held" || ph.state === "dribble") && ph.holder === id;
 
-    let gazeP = resolveFace(a?.face, id, s, p);
+    // Block: Brust zur geblockten Verteidigerin (bestimmt Screen-Winkel)
+    const face = a?.face ?? (a?.type === "screen" && a.on ? a.on : undefined);
+    let gazeP = resolveFace(face, id, s, p);
     let bodyLocked = false;
     if (!gazeP) {
       if (team === "offense") {
@@ -311,7 +317,7 @@ function makeSampler(C) {
         }
       } else if (a && ACTIONS[a.type]?.kind === "relation" && ACTIONS[a.type].implemented) {
         bodyLocked = true; // defensive Beinarbeit: Körper bleibt zur Gegenspielerin
-        gazeP = a.type === "guard" || a.type === "trap" ? s.ev.posAt(a.target, s.u) : s.ev.ballGround(s.u);
+        gazeP = ["guard", "trap", "switch", "closeout"].includes(a.type) ? s.ev.posAt(a.target, s.u) : s.ev.ballGround(s.u);
       } else {
         gazeP = s.ev.ballGround(s.u);
       }
@@ -354,7 +360,8 @@ function makeSampler(C) {
 /**
  * Passlinien von der Ballführerin zu allen Mitspielerinnen.
  * status: "open"   – direkter Pass möglich
- *         "lob"    – nur über die Hände nahe stehender Verteidigerinnen (blockedBy), dahinter frei
+ *         "hands"  – nur an den Händen nahe stehender Verteidigerinnen (blockedBy) vorbei:
+ *                    Lob darüber oder Bodenpass darunter; dahinter frei
  *         "closed" – Verteidigerin in der Linie oder Empfängerin eng gedeckt
  *         "long"   – über 10 m gegen Presse: riskant
  * Verteidigerinnen direkt an der Passgeberin werden NICHT ausgeblendet: Reichen ihre
@@ -377,12 +384,27 @@ export function passLanes(C, players, holder) {
     // Hände erreichen die Passlinie, wenn sie senkrecht näher als die Armreichweite ist.
     // Zwei Trapperinnen schließen so auch die Lücke zwischen sich ("Split").
     const blockedBy = near.filter((o) => distToSegment(o, hp, mp) < LANE_REACH).map((o) => o.id);
-    const clearance = far.length ? Math.min(...far.map((o) => distToSegment(o, hp, mp))) : Infinity;
-    const marked = opp.length ? Math.min(...opp.map((o) => dist(o, mp))) : Infinity;
+    // Linienfreiheit: nur Verteidigerinnen, die (in Passrichtung) vor der Empfängerin
+    // stehen. Wer hinter ihr steht, wird über die Deckung (marked) bewertet.
+    const L2 = length * length || 1e-9;
+    const inLane = far.filter((o) => ((o.x - hp.x) * (mp.x - hp.x) + (o.y - hp.y) * (mp.y - hp.y)) / L2 < 1);
+    const clearance = inLane.length ? Math.min(...inLane.map((o) => distToSegment(o, hp, mp))) : Infinity;
+    // Gedeckt ist die Empfängerin nur durch Verteidigerinnen auf der Passseite (sie
+    // können den Ball abfangen) oder mit Körperkontakt. Eine Verteidigerin hinter der
+    // Empfängerin (z. B. beim Post-Entry nach einem Switch) schließt die Linie nicht.
+    const toPasser = sub(hp, mp);
+    const markers = opp.filter((o) => {
+      const d = dist(o, mp);
+      if (d <= 5) return true;
+      const rel = sub(o, mp);
+      const cos = (rel.x * toPasser.x + rel.y * toPasser.y) / (Math.max(d, 1e-6) * Math.max(len(toPasser), 1e-6));
+      return cos > -0.17; // innerhalb ~100° Richtung Passgeberin
+    });
+    const marked = markers.length ? Math.min(...markers.map((o) => dist(o, mp))) : Infinity;
     let status;
     if (clearance <= 8 || marked <= 10) status = "closed";
     else if (length > LANE_MAX_LENGTH) status = "long";
-    else if (blockedBy.length) status = "lob";
+    else if (blockedBy.length) status = "hands";
     else status = "open";
     lanes.push({ from: holder, to: id, clearance, marked, length, blockedBy, status, open: status === "open" });
   }
@@ -399,7 +421,7 @@ function checkPasses(C) {
       const lane = passLanes(C, f.players, p.from).find((l) => l.to === p.to);
       if (!lane) continue;
       const where = `Beat ${b.index + 1} (${b.beat.title ?? b.beat.id})`;
-      if (lane.status === "lob" && !p.lob) out.push(`${where}: Pass ${p.from}→${p.to} geht direkt durch die Arme von ${lane.blockedBy.join(", ")} – nur als Lob möglich (lob: true)`);
+      if (lane.status === "hands" && !beatsHands(passKind(p))) out.push(`${where}: Pass ${p.from}→${p.to} geht direkt durch die Arme von ${lane.blockedBy.join(", ")} – nur als Lob oder Bodenpass möglich`);
       if (lane.status === "closed") out.push(`${where}: Pass ${p.from}→${p.to} durch eine geschlossene Passlinie`);
     }
   }
@@ -449,7 +471,8 @@ export function sampleFrame(C, t) {
 
     let stance = "normal";
     if (trappedBy.has(id) && trappedBy.get(id).strength > 0.35) stance = "trap";
-    else if (a?.type === "guard" && (ph.holder === a.target || ph.pass?.from === a.target)) {
+    else if (a?.type === "closeout") stance = "closeout";
+    else if ((a?.type === "guard" || a?.type === "switch") && (ph.holder === a.target || ph.pass?.from === a.target)) {
       const tp = ev.posAt(a.target, u);
       stance = tp.y > C.courtH || tp.y < 0 ? "arms-up" : "on-ball";
     } else if (a?.type === "deny") stance = "deny";
@@ -479,12 +502,12 @@ export function sampleFrame(C, t) {
     const recv = S.pos(ph.pass.to, tEnd);
     const to = add(recv, scale(norm(sub(S.pos(ph.pass.from, tStart), recv)), 4.5));
     const ground = lerp(from, to, ph.s);
-    const d = dist(from, to);
-    const arc = ph.pass.lob ? 13 : Math.min(6, d * 0.06);
+    const kind = passKind(ph.pass);
     ball = {
       state: "flight", x: ground.x, y: ground.y,
-      z: 3.5 + arc * 4 * ph.s * (1 - ph.s),
-      from: ph.pass.from, to: ph.pass.to, fromPos: from, toPos: to, progress: ph.s, lob: !!ph.pass.lob,
+      z: flightHeight(kind, ph.s, dist(from, to)),
+      from: ph.pass.from, to: ph.pass.to, fromPos: from, toPos: to, progress: ph.s,
+      kind, lob: kind === "lob",
     };
   } else if (ph.state === "dribble") {
     const pl = players[ph.holder];
@@ -564,7 +587,7 @@ export function beatDiagram(C, index) {
   }
   for (const p of b.passes) {
     const { start, end } = actionWindow(p);
-    out.push({ kind: "pass", player: p.from, to: p.to, team: teamOf(C.play, p.from), points: [ev.posAt(p.from, start), ev.posAt(p.to, end)], lob: !!p.lob });
+    out.push({ kind: "pass", player: p.from, to: p.to, team: teamOf(C.play, p.from), points: [ev.posAt(p.from, start), ev.posAt(p.to, end)], passKind: passKind(p), lob: passKind(p) === "lob" });
   }
   b.diagram = out;
   return out;

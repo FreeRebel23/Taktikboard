@@ -40,7 +40,7 @@ test("nach dem Read verzweigt die Verteidigung: X3 geht zur 4 (A) oder bleibt in
   assert.ok(dist(fb.players.d3, { x: 74, y: 206 }) < 1, "B: X3 bleibt in der Mitte");
   const lane = (f, id) => f.lanes.find((l) => l.to === id).status;
   assert.equal(lane(fa, "o4"), "closed");
-  assert.equal(lane(fa, "o5"), "lob");
+  assert.equal(lane(fa, "o5"), "hands");
   assert.equal(lane(fb, "o4"), "open", "B: Rückpass frei");
   assert.notEqual(lane(fb, "o5"), "open", "B: Mitte zu");
 });

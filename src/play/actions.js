@@ -20,8 +20,9 @@ export const ACTIONS = {
   deny:     { kind: "relation", profile: "move", implemented: true, label: "Deny" },
   help:     { kind: "relation", profile: "move", implemented: true, label: "Help" },
   trap:     { kind: "relation", profile: "close", implemented: true, label: "Trap / Doppeln", group: true },
-  switch:   { kind: "relation", implemented: false, label: "Switch" },
-  closeout: { kind: "relation", implemented: false, label: "Closeout" },
+  switch:   { kind: "relation", profile: "close", implemented: true, label: "Switch" },
+  closeout: { kind: "relation", profile: "close", implemented: true, label: "Closeout" },
+  hedge:    { kind: "relation", implemented: false, label: "Hedge" },
   handoff:  { kind: "ball", implemented: false, label: "Handoff" },
 };
 

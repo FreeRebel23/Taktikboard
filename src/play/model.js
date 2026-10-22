@@ -21,6 +21,7 @@
  */
 
 import { ACTIONS, actorsOf, actionWindow } from "./actions.js";
+import { PASS_KINDS } from "./ballFlight.js";
 
 const EPS = 1e-6;
 
@@ -120,6 +121,7 @@ export function validatePlay(play) {
     let lastEnd = -1;
     for (const p of passesOf(beat)) {
       const { start, end } = actionWindow(p);
+      if (p.kind && !PASS_KINDS[p.kind]) errors.push(`${where}: unbekannte Passart "${p.kind}"`);
       if (p.from !== holder) errors.push(`${where}: Pass von "${p.from}", aber Ball ist bei "${holder}"`);
       if (!ids.has(p.to)) errors.push(`${where}: Pass an unbekannte Spielerin "${p.to}"`);
       else if (teamOf(play, p.to) !== teamOf(play, p.from)) warnings.push(`${where}: Pass von "${p.from}" an Gegnerin "${p.to}"`);

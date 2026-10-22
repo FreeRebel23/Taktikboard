@@ -95,7 +95,7 @@ test("Verteidigerin direkt vor der Passgeberin in der Passrichtung → Linie ist
   // Regression: früher wurden alle Verteidigerinnen < 1,2 m an der Passgeberin ignoriert → "open"
   const lane = laneTo(laneSetup({ x: 75, y: 92 }), "o2");
   assert.notEqual(lane.status, "open");
-  assert.equal(lane.status, "lob");
+  assert.equal(lane.status, "hands");
   assert.deepEqual(lane.blockedBy, ["d1"]);
 });
 
@@ -127,4 +127,23 @@ test("direkter Pass durch die Arme einer Verteidigerin erzeugt eine Warnung, als
   ] });
   assert.ok(pass(false).warnings.some((w) => w.includes("nur als Lob")));
   assert.deepEqual(pass(true).warnings, []);
+});
+
+test("Verteidigerin HINTER der Empfängerin schließt die Passlinie nicht (Post-Entry)", () => {
+  // Passgeberin oben, Empfängerin tiefer, Verteidigerin noch tiefer (Korbseite) hinter ihr
+  const C = laneSetup({ x: 140, y: 10 }, { d2: { x: 75, y: 38 } });
+  assert.equal(laneTo(C, "o2").status, "open");
+  // dieselbe Verteidigerin VOR der Empfängerin (Passseite) deckt sie
+  const C2 = laneSetup({ x: 140, y: 10 }, { d2: { x: 75, y: 52 } });
+  assert.equal(laneTo(C2, "o2").status, "closed");
+});
+
+test("Bodenpass und Lob kommen an Händen vorbei, direkter Pass nicht", () => {
+  const pass = (kind) => laneSetup({ x: 75, y: 92 }, { actions: [
+    { type: "hold", player: "d1" },
+    { type: "pass", from: "o1", to: "o2", start: 0.2, end: 0.6, kind },
+  ] });
+  assert.ok(pass("chest").warnings.some((w) => w.includes("Bodenpass")));
+  assert.deepEqual(pass("bounce").warnings, []);
+  assert.deepEqual(pass("lob").warnings, []);
 });

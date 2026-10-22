@@ -3,6 +3,7 @@
 
 import { BALL_COLOR } from "../court/constants.js";
 import { useView } from "./view.js";
+import { flightHeight } from "../play/ballFlight.js";
 
 const Z_SCREEN = 0.6; // Höhe → Bildschirmversatz nach oben
 const ARC_SAMPLES = 20;
@@ -19,8 +20,7 @@ export function BallDefs() {
 
 function arcPoint(ball, s, sv) {
   const { fromPos: a, toPos: b } = ball;
-  const arc = ball.lob ? 13 : Math.min(6, Math.hypot(b.x - a.x, b.y - a.y) * 0.06);
-  const z = 3.5 + arc * 4 * s * (1 - s);
+  const z = flightHeight(ball.kind, s, Math.hypot(b.x - a.x, b.y - a.y));
   const lift = sv(0, -z * Z_SCREEN);
   return { x: a.x + (b.x - a.x) * s + lift.x, y: a.y + (b.y - a.y) * s + lift.y };
 }

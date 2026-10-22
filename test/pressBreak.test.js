@@ -122,7 +122,7 @@ test("Passwege: 5 ist nur per Lob über den Trap erreichbar, 2 und 4 sind zu", (
   const f = sampleFrame(C, endOf("second_row") - 0.01);
   const lane = (id) => f.lanes.find((l) => l.to === id);
   // Die Trapperinnen stehen in der Passrichtung – der direkte Pass ist NICHT frei
-  assert.equal(lane("o5").status, "lob");
+  assert.equal(lane("o5").status, "hands");
   assert.ok(lane("o5").blockedBy.includes("d1"));
   assert.notEqual(lane("o5").status, "open");
   assert.equal(lane("o2").status, "closed");
@@ -175,7 +175,7 @@ test("Diagramm liefert Laufwege und Pässe je Beat", () => {
 test("nicht implementierte Aktion verhält sich wie Hold", () => {
   const play = structuredClone(pressBreak);
   play.beats[1].actions = play.beats[1].actions.filter((a) => a.player !== "d5");
-  play.beats[1].actions.push({ type: "closeout", player: "d5", target: "o3" });
+  play.beats[1].actions.push({ type: "hedge", player: "d5", target: "o3" });
   const C2 = compilePlay(play);
   assert.ok(C2.warnings.length > 0);
   const b = C2.beats[1];

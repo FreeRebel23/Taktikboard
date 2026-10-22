@@ -60,7 +60,7 @@ test("Trap braucht zwei Defense-Spielerinnen und ein Offense-Ziel", () => {
 });
 
 test("geplante Aktionen erzeugen eine Warnung, keinen Fehler", () => {
-  const { errors, warnings } = validatePlay(tiny([{ duration: 1000, actions: [{ type: "switch", player: "d1", target: "o2" }] }]));
+  const { errors, warnings } = validatePlay(tiny([{ duration: 1000, actions: [{ type: "hedge", player: "d1", target: "o2" }] }]));
   assert.deepEqual(errors, []);
-  assert.ok(warnings.some((w) => w.includes("switch")));
+  assert.ok(warnings.some((w) => w.includes("hedge")));
 });
