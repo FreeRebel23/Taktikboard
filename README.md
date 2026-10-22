@@ -37,15 +37,21 @@ Handy/Tablet (gleiches WLAN) im Browser öffnen.
 npm test           # Play-Modell, Animation Engine, Press-Break-Szenario (node:test)
 ```
 
+## Nutzung in Kürze
+- **Bibliothek:** ★ eingebaute Spielzüge, ◆ eigene Spielzüge, „+ Neues Play“ (startet mit der aktuellen Aufstellung), „Import“ (`.taktik.json`).
+- **Trainer:** Varianten (Reads) zeigen, Fokus-Kamera, Analyse-Ebenen (Modell-Einschätzung), Zeichnen.
+- **Spielerin:** Position wählen („Ich bin die 5“), mit „Weiter“ Beat für Beat: Aufgabe, Wann, Achte auf, Ziel und Haltung, Read-Entscheidungen.
+- **Bearbeiten:** Figur antippen → Aktion → Ziel antippen; Coaching pro Rolle; „+ Read“ für Varianten.
+- **Teilen:** Link (öffnet direkt die Spielerinnen-Ansicht), System-Teilen oder Datei – ohne Konto und ohne Server.
+
 ## Aufbau
-- `src/Taktikboard.jsx` – App-Orchestrierung (Freimodus, Legacy-Presets, aktionsbasierte Plays)
-- `src/play/` – Play-Datenmodell, Aktionen, Animation Engine, Plays (z. B. `plays/pressBreak.js`)
+- `src/Taktikboard.jsx` – Bibliothek + Freimodus (Drag, Zeichnen, Legacy-Presets, REC)
+- `src/studio/` – Play-Studio: Trainer-, Spielerinnen- und Bearbeiten-Ansicht, Teilen
+- `src/play/` – Basketball-Kern ohne UI: Datenmodell, Varianten, Engine, Analyse, Kamera, Plays
 - `src/render/` – 2,5D-Spielerinnen, Ball, taktische Ebenen
-- `src/court/`, `src/hooks/`, `src/ui/`, `src/legacy/` – Spielfeld, Gesten/Playback, UI, Bestand (Keyframes, REC)
-- `src/main.jsx` – React-Einstiegspunkt
+- `src/ui/`, `src/hooks/`, `src/store/`, `src/court/`, `src/legacy/` – Bühne/Bedienelemente, Hooks, Speicher/Teilen, Spielfeld, Bestand
 - `vite.config.js` – Vite + PWA-Konfiguration (Manifest, Service Worker)
-- `scripts/gen-icons.mjs` – generiert die PWA-Icons
-- `public/` – Icons & favicon
+- `scripts/gen-icons.mjs`, `public/` – Icons
 
 Architektur, Datenmodell und Stand: siehe [`DEVELOPMENT_STATUS.md`](DEVELOPMENT_STATUS.md).
 Produktleitbild: [`NORTH_STAR.md`](NORTH_STAR.md).
