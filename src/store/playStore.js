@@ -9,6 +9,8 @@
  *  - Sicherungsdatei mit allen Spielzügen für Gerätewechsel und gegen Browser-Löschung.
  */
 
+import { loadSeqs } from "../legacy/recordingStore.js";
+
 const KEY = "taktikboard.plays.v1";
 const DRAFTS = "taktikboard.drafts.v1";
 export const SCHEMA = 1;
@@ -30,7 +32,8 @@ function readJson(key, fallback) {
 }
 
 /** Schreibt und prüft durch Zurücklesen. → { ok, error? } */
-function writeJson(key, value) {
+/** Schreiben mit Bestätigung durch Zurücklesen – auch für die Legacy-Aufnahmen genutzt */
+export function writeJson(key, value) {
   const s = storage();
   const text = JSON.stringify(value);
   if (!s) return { ok: false, error: "Speichern ist in diesem Browser nicht möglich (privater Modus oder gesperrte Website-Daten). Bitte den Spielzug als Datei sichern." };
@@ -130,7 +133,11 @@ export function pendingDrafts() {
 /* ---------------- Sicherung (alle Spielzüge in einer Datei) ---------------- */
 
 export function backupObject() {
-  return { format: "taktikboard-backup", version: 1, exportedAt: new Date().toISOString(), plays: loadMyPlays().map((x) => x.play) };
+  return {
+    format: "taktikboard-backup", version: 1, exportedAt: new Date().toISOString(),
+    plays: loadMyPlays().map((x) => x.play),
+    sequences: loadSeqs(),            // Aufnahmen vom Freien Board (REC)
+  };
 }
 
 /**

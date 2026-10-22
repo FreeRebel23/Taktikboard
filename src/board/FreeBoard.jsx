@@ -30,6 +30,7 @@ export default function FreeBoard({ onHome, onCreatePlay }) {
   const [hasRecording, setHasRecording] = useState(false);
   const [replaying, setReplaying] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [seqMsg, setSeqMsg] = useState(null);      // { ok, text } – Ergebnis des Speicherns
   const [saveName, setSaveName] = useState("");
   const [sequences, setSequences] = useState(loadSeqs);
   const [activeSeqId, setActiveSeqId] = useState(null);
@@ -118,8 +119,12 @@ export default function FreeBoard({ onHome, onCreatePlay }) {
     const name = saveName.trim() || `Sequenz ${sequences.length + 1}`;
     const seq = { id: "seq_" + Date.now(), name, frames: clone(bufferRef.current) };
     const next = [...sequences, seq];
-    setSequences(next); persistSeqs(next);
+    const res = persistSeqs(next);
+    // Nur bei bestätigtem Speichern übernehmen – sonst bleibt die Aufnahme zum erneuten Versuch erhalten
+    if (!res.ok) { setSeqMsg({ ok: false, text: res.error }); return; }
+    setSequences(next);
     setSaving(false); setSaveName("");
+    setSeqMsg({ ok: true, text: `„${name}“ gespeichert.` });
   };
 
   const playSequence = (seq) => {
@@ -131,7 +136,9 @@ export default function FreeBoard({ onHome, onCreatePlay }) {
 
   const deleteSequence = (id) => {
     const next = sequences.filter((s) => s.id !== id);
-    setSequences(next); persistSeqs(next);
+    const res = persistSeqs(next);
+    if (!res.ok) { setSeqMsg({ ok: false, text: res.error }); return; }
+    setSequences(next);
     if (activeSeqId === id) setActiveSeqId(null);
   };
 
@@ -374,6 +381,12 @@ export default function FreeBoard({ onHome, onCreatePlay }) {
           {recording && <span style={{ fontSize: 12.5, color: REC_COLOR, letterSpacing: "0.04em" }}>Aufnahme läuft …</span>}
         </div>
 
+        {seqMsg && (
+          <div role={seqMsg.ok ? "status" : "alert"} onClick={() => setSeqMsg(null)} style={{ marginBottom: 8, padding: "7px 10px", borderRadius: 8, fontSize: 13,
+            background: seqMsg.ok ? "rgba(95,211,141,0.12)" : "#3A1D1A", color: seqMsg.ok ? "#CFF5DE" : "#FFD9D3" }}>
+            {seqMsg.ok ? "✓ " : "Nicht gespeichert: "}{seqMsg.text}
+          </div>
+        )}
         {saving && !recording && (
           <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
             <input value={saveName} autoFocus onChange={(e) => setSaveName(e.target.value)}

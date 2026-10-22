@@ -105,3 +105,20 @@ test("Löschen schlägt sauber fehl, wenn der Speicher gesperrt ist", () => {
   fake.mode = "ok";
   assert.equal(S.loadMyPlays().length, 1);
 });
+
+test("Sicherung enthält Board-Aufnahmen; Import ergänzt nur neue; Fehler werden gemeldet", async () => {
+  const { importSeqs, loadSeqs, persistSeqs } = await import("../src/legacy/recordingStore.js");
+  const a = { id: "seq_1", name: "A", frames: [{}] };
+  assert.equal(importSeqs([a]).added, 1);
+  assert.equal(importSeqs([a, { id: "seq_2", name: "B", frames: [] }, { bogus: true }]).added, 1);
+  assert.deepEqual(loadSeqs().map((x) => x.id), ["seq_1", "seq_2"]);
+  assert.deepEqual(S.backupObject().sequences.map((x) => x.id), ["seq_1", "seq_2"]);
+  fake.mode = "quota";
+  const r = persistSeqs([...loadSeqs(), { id: "seq_3", name: "C", frames: [] }]);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /voll/);
+  assert.match(r.error, /Aufnahmen/);
+  assert.equal(loadSeqs().length, 2, "nichts überschrieben");
+  fake.mode = "drop";
+  assert.equal(persistSeqs([]).ok, false, "verschlucktes Schreiben gilt nicht als gespeichert");
+});

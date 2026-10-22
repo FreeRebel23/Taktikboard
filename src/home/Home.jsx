@@ -73,7 +73,7 @@ function PlayCard({ play, updatedAt, builtin, onOpen, onPlayer, onEdit, onShare,
 }
 
 export default function Home({
-  myPlays, builtins, drafts, notice, onDismissNotice,
+  myPlays, builtins, drafts, notice, onDismissNotice, hasRecordings = false,
   onOpen, onNew, onImport, onBackup, onBoard, onShare, onDelete, onDuplicate, onExportOne, onResumeDraft, onDiscardDraft,
 }) {
   const [more, setMore] = useState(null);
@@ -130,7 +130,7 @@ export default function Home({
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button style={action(true)} onClick={onNew}>+ Neuer Spielzug</button>
           <button style={action(false)} onClick={onImport}>Importieren</button>
-          {myPlays.length > 0 && <button style={action(false)} onClick={onBackup}>Sicherung herunterladen</button>}
+          {(myPlays.length > 0 || hasRecordings) && <button style={action(false)} onClick={onBackup}>Sicherung herunterladen</button>}
         </div>
 
         <section style={section} aria-label="Meine Spielzüge">

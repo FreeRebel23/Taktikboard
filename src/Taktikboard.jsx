@@ -16,6 +16,7 @@ import {
 } from "./store/playStore.js";
 import { playFromHash, looksLikePlay, fileNameFor } from "./store/share.js";
 import { newPlayFrom } from "./studio/builderModel.js";
+import { importSeqs, loadSeqs } from "./legacy/recordingStore.js";
 
 const isBuiltin = (id) => PLAYS.some((p) => p.id === id);
 
@@ -83,19 +84,27 @@ export default function Taktikboard() {
   const importFile = async (file) => {
     try {
       const data = JSON.parse(await file.text());
-      const list = data?.format === "taktikboard-backup" ? data.plays : [data];
+      const isBackup = data?.format === "taktikboard-backup";
+      const list = isBackup ? data.plays : [data];
       const valid = [], broken = [];
       for (const p of list ?? []) {
         if (!looksLikePlay(p)) { broken.push("unbekannte Daten"); continue; }
         const { errors } = validatePlayTree(p);
         (errors.length ? broken : valid).push(errors.length ? p.name : p);
       }
-      if (!valid.length) throw new Error(broken.length ? "Die Datei enthält keinen abspielbaren Spielzug." : "Die Datei enthält keinen Spielzug.");
+      const seqs = isBackup && Array.isArray(data.sequences) ? data.sequences : [];
+      if (!valid.length && !seqs.length) throw new Error(broken.length ? "Die Datei enthält keinen abspielbaren Spielzug." : "Die Datei enthält keinen Spielzug.");
       // eingebaute Beispiele nicht als "eigene" importieren
-      const res = importPlays(valid.map((p) => (isBuiltin(p.id) ? { ...p, id: newPlayId() } : p)), newPlayId);
+      const res = valid.length ? importPlays(valid.map((p) => (isBuiltin(p.id) ? { ...p, id: newPlayId() } : p)), newPlayId) : { ok: true, added: 0, skipped: 0 };
       if (!res.ok) throw new Error(res.error);
+      const sres = seqs.length ? importSeqs(seqs) : { ok: true, added: 0 };
       refresh();
-      setNotice({ text: `${res.added} Spielzug${res.added === 1 ? "" : "e"} importiert${res.skipped ? `, ${res.skipped} bereits vorhanden` : ""}${broken.length ? `, ${broken.length} fehlerhaft übersprungen` : ""}.` });
+      const parts = [`${res.added} Spielzug${res.added === 1 ? "" : "e"} importiert`];
+      if (res.skipped) parts.push(`${res.skipped} bereits vorhanden`);
+      if (broken.length) parts.push(`${broken.length} fehlerhaft übersprungen`);
+      if (sres.added) parts.push(`${sres.added} Board-Aufnahme${sres.added === 1 ? "" : "n"} wiederhergestellt`);
+      if (!sres.ok) parts.push(`Board-Aufnahmen NICHT importiert: ${sres.error}`);
+      setNotice({ error: !sres.ok, text: parts.join(", ") + "." });
     } catch (e) {
       setNotice({ error: true, text: `Import fehlgeschlagen: ${e.message}` });
     }
@@ -104,7 +113,7 @@ export default function Taktikboard() {
   const backup = () => {
     const obj = backupObject();
     downloadJson(obj, `taktikboard-sicherung-${new Date().toISOString().slice(0, 10)}.json`);
-    setNotice({ text: `Sicherung mit ${obj.plays.length} Spielzügen heruntergeladen. Bewahre die Datei gut auf (z. B. in der Cloud).` });
+    setNotice({ text: `Sicherung mit ${obj.plays.length} Spielzügen${obj.sequences.length ? ` und ${obj.sequences.length} Board-Aufnahmen` : ""} heruntergeladen. Bewahre die Datei gut auf (z. B. in der Cloud).` });
   };
 
   const duplicate = (play) => {
@@ -148,6 +157,7 @@ export default function Taktikboard() {
     <>
       <Home
         myPlays={myPlays} builtins={PLAYS} drafts={drafts} notice={notice} onDismissNotice={() => setNotice(null)}
+        hasRecordings={loadSeqs().length > 0}
         onOpen={(play, origin, mode) => openPlay(play, origin, mode)}
         onNew={() => setNewSheet(true)}
         onImport={() => fileRef.current?.click()}
