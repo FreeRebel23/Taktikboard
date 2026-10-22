@@ -3,12 +3,15 @@
 
 import { useEffect, useState } from "react";
 import { C_UI, IconButton, Segmented } from "./studioUi.jsx";
-import { shareUrl, playToJson, fileNameFor } from "../store/share.js";
+import { shareUrl, playToJson, fileNameFor, publicAddressProblem } from "../store/share.js";
+import Qr, { QR_MAX } from "../ui/Qr.jsx";
 
 export default function ShareSheet({ play, onClose }) {
   const [target, setTarget] = useState("player");
   const [url, setUrl] = useState("");
   const [status, setStatus] = useState("");
+  const [showQr, setShowQr] = useState(false);
+  const problem = publicAddressProblem(typeof location !== "undefined" ? location : null);
 
   useEffect(() => {
     let alive = true;
@@ -58,12 +61,29 @@ export default function ShareSheet({ play, onClose }) {
           <Segmented size="sm" label="Ansicht beim Öffnen" value={target} onChange={setTarget}
             options={[{ value: "player", label: "Spielerinnen-Ansicht" }, { value: "coach", label: "Trainer-Ansicht" }]} />
         </div>
+        {problem && (
+          <div role="alert" style={{ padding: "8px 10px", borderRadius: 10, background: "rgba(255,209,102,0.12)", color: "#FFE9B3", fontSize: 13.5, lineHeight: 1.4 }}>
+            {problem}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {canShare && <IconButton active onClick={shareLink} title="Über das Handy teilen" disabled={!url}>Teilen …</IconButton>}
           <IconButton onClick={copy} title="Link kopieren" disabled={!url}>Link kopieren</IconButton>
           {canShareFile && <IconButton onClick={shareFile} title="Als Datei teilen">Datei teilen</IconButton>}
           <IconButton onClick={download} title="Als Datei speichern">Datei speichern</IconButton>
+          <IconButton active={showQr} onClick={() => setShowQr((v) => !v)} title="QR-Code zeigen" disabled={!url}>QR-Code</IconButton>
         </div>
+        {showQr && url && (url.length <= QR_MAX ? (
+          <div style={{ display: "grid", justifyItems: "center", gap: 6 }}>
+            <Qr text={url} label={`QR-Code für ${play.name}`} />
+            <div style={{ fontSize: 12.5, color: C_UI.dim }}>Mit der Handy-Kamera scannen.</div>
+          </div>
+        ) : (
+          <div role="status" style={{ fontSize: 13.5, color: C_UI.muted, lineHeight: 1.4 }}>
+            Dieser Spielzug ist für einen QR-Code zu groß ({url.length.toLocaleString("de-DE")} Zeichen). Schick den Link
+            über den Messenger der Mannschaft – oder lass die Spielerinnen über „App teilen“ (Startbildschirm) die App öffnen.
+          </div>
+        ))}
         <textarea readOnly value={url} aria-label="Link zum Spielzug" onFocus={(e) => e.target.select()}
           style={{ width: "100%", height: 64, resize: "none", fontSize: 11.5, background: "#0F1317", color: C_UI.muted,
             border: `1px solid ${C_UI.border}`, borderRadius: 8, padding: 8, fontFamily: "ui-monospace, monospace", boxSizing: "border-box" }} />

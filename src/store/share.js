@@ -63,3 +63,14 @@ export function looksLikePlay(x) {
 
 export const fileNameFor = (play) =>
   `${(play.name || "spielzug").toLowerCase().replace(/[^a-z0-9äöüß]+/g, "-").replace(/^-|-$/g, "")}.taktik.json`;
+
+/** Ist die aktuelle Adresse für andere Geräte erreichbar? Gibt einen Hinweis oder null zurück. */
+export function publicAddressProblem(loc) {
+  if (!loc) return null;
+  const host = loc.hostname ?? "";
+  if (loc.protocol === "file:") return "Die App läuft als lokale Datei – Links funktionieren nur auf diesem Gerät. Für die Mannschaft die Pilot-Adresse (https://…) verwenden.";
+  if (/^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(host)) return "Die App läuft lokal (localhost) – dieser Link funktioniert nur auf diesem Gerät. Für die Mannschaft die Pilot-Adresse (https://…) verwenden.";
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) return "Die App läuft in einem lokalen Netz – der Link funktioniert nur im selben WLAN und ohne Offline-Modus. Für die Mannschaft die Pilot-Adresse (https://…) verwenden.";
+  if (loc.protocol !== "https:") return "Die App läuft ohne HTTPS – Installation und Offline-Nutzung funktionieren dann auf Handys nicht. Für die Mannschaft die Pilot-Adresse (https://…) verwenden.";
+  return null;
+}

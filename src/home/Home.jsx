@@ -7,6 +7,8 @@ import { OFF_COLOR, DEF_COLOR } from "../court/constants.js";
 import { validatePlayTree, allChoicePaths } from "../play/index.js";
 import { storageInfo } from "../store/playStore.js";
 import { loadReadLog, readLogCsv, clearReadLog } from "../store/readLog.js";
+import { publicAddressProblem } from "../store/share.js";
+import Qr from "../ui/Qr.jsx";
 
 function downloadText(text, filename, type) {
   const url = URL.createObjectURL(new Blob(["\uFEFF" + text], { type }));
@@ -78,6 +80,8 @@ export default function Home({
   const [store, setStore] = useState(null);
   const [readLog, setReadLog] = useState(loadReadLog);
   const [askReset, setAskReset] = useState(false);
+  const [appQr, setAppQr] = useState(false);
+  const appUrl = typeof location !== "undefined" ? location.origin + location.pathname : "";
   useEffect(() => { storageInfo().then(setStore); }, [myPlays.length]);
 
   const section = { display: "grid", gap: 10 };
@@ -96,7 +100,10 @@ export default function Home({
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
             Taktik<span style={{ color: C_UI.accent }}>board</span>
           </h1>
-          <button style={action(false)} onClick={onBoard}>Freies Board</button>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button style={action(false)} onClick={() => setAppQr(true)}>App teilen</button>
+            <button style={action(false)} onClick={onBoard}>Freies Board</button>
+          </div>
         </header>
 
         {notice && (
@@ -169,6 +176,18 @@ export default function Home({
         </footer>
       </div>
 
+      {appQr && (
+        <Dialog title="App auf ein anderes Handy holen" onClose={() => setAppQr(false)} actions={[
+          { label: "Schließen", primary: true, onClick: () => setAppQr(false) },
+        ]}>
+          <div style={{ display: "grid", justifyItems: "center", gap: 8 }}>
+            <Qr text={appUrl} label="QR-Code der App-Adresse" />
+            <div style={{ fontSize: 13, overflowWrap: "anywhere", textAlign: "center" }}>{appUrl}</div>
+            {publicAddressProblem(location) && <div role="alert" style={{ color: "#FFE9B3" }}>{publicAddressProblem(location)}</div>}
+            <div>Mit der Kamera scannen, dann im Browser „Zum Home-Bildschirm“ wählen. Die eigenen Spielzüge bleiben auf dem jeweiligen Gerät – Spielzüge werden über „Teilen“ weitergegeben.</div>
+          </div>
+        </Dialog>
+      )}
       {askReset && (
         <Dialog title="Read-Training zurücksetzen?" onClose={() => setAskReset(false)} actions={[
           { label: "Abbrechen", onClick: () => setAskReset(false) },

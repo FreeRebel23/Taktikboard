@@ -42,3 +42,19 @@ test("Import einer Spielzug-Datei und Sicherung herunterladen", async ({ page },
   expect(data.format).toBe("taktikboard-backup");
   expect(data.plays.map((p) => p.name)).toContain("Importierter Zug");
 });
+
+test("QR-Code: App-Adresse und Hinweis, dass localhost nicht teilbar ist", async ({ page }) => {
+  const noErrors = collectErrors(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "App teilen" }).click();
+  await expect(page.getByRole("img", { name: "QR-Code der App-Adresse" })).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("localhost");
+  await page.getByRole("button", { name: "Schließen" }).click();
+
+  await card(page, "Press Break – Full Court").getByRole("button", { name: "Teilen" }).click();
+  await expect(page.getByRole("dialog", { name: "Spielzug teilen" }).getByRole("alert")).toContainText("localhost");
+  await page.getByTitle("QR-Code zeigen").click();
+  // Großer Spielzug → ehrlicher Hinweis statt unlesbarem QR-Code
+  await expect(page.getByText(/zu groß/).or(page.getByRole("img", { name: /QR-Code für/ }))).toBeVisible();
+  noErrors();
+});

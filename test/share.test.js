@@ -30,3 +30,12 @@ test("unbrauchbare Daten werden erkannt", async () => {
 test("Dateiname ist sprechend", () => {
   assert.equal(fileNameFor({ name: "Press Break – Full Court" }), "press-break-full-court.taktik.json");
 });
+
+test("publicAddressProblem: nur HTTPS mit öffentlicher Adresse ist ok", async () => {
+  const { publicAddressProblem } = await import("../src/store/share.js");
+  assert.equal(publicAddressProblem({ protocol: "https:", hostname: "freerebel23.github.io" }), null);
+  assert.match(publicAddressProblem({ protocol: "http:", hostname: "localhost" }), /localhost/);
+  assert.match(publicAddressProblem({ protocol: "http:", hostname: "192.168.1.20" }), /lokalen Netz/);
+  assert.match(publicAddressProblem({ protocol: "http:", hostname: "example.org" }), /HTTPS/);
+  assert.match(publicAddressProblem({ protocol: "file:", hostname: "" }), /lokale Datei/);
+});
