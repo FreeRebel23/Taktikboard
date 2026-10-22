@@ -1,7 +1,29 @@
 # Taktikboard – Development Status
 
-Stand: zweiter Entwicklungsdurchlauf („Next Generation“) auf PR #1.
+Stand: dritter Entwicklungsdurchlauf („Pilotfähigkeit“) auf PR #1.
 Leitbild: [`NORTH_STAR.md`](NORTH_STAR.md). Der Trainer modelliert Basketball, das Board macht es verständlich.
+
+Pilot-Dokumente: [`PILOT.md`](PILOT.md) (HTTPS-Strategie, Schritte, Datenhinweise) ·
+[`GERAETETEST.md`](GERAETETEST.md) (iOS/Android-Checkliste) · [`PRAXISTEST.md`](PRAXISTEST.md) (Test mit Mannschaft).
+
+## Dritter Durchlauf: Pilotfähigkeit
+
+| Bereich | Was sich geändert hat | Stand |
+|---|---|---|
+| **Startbildschirm** | „Spielzüge“ statt Board als Einstieg: eigene Züge, Beispiele, ungesicherte Entwürfe, Neu/Import/Sicherung, Freies Board als eigener Bildschirm | implementiert, E2E |
+| **Datensicherheit** | Jeder Speichervorgang wird zurückgelesen; Fehler (Speicher voll, privater Modus, nicht bestätigt) erscheinen als „Nicht gespeichert“ mit Grund und Datei-Ausweg – nie als Erfolg | implementiert, Unit + E2E (simulierter voller Speicher) |
+| | Automatischer Entwurf 0,4 s nach jeder Änderung; Wiederherstellung nach Neuladen/Absturz; Rückfrage beim Verlassen; `beforeunload`-Schutz | implementiert, E2E |
+| | Sicherungsdatei (alle Spielzüge + Board-Aufnahmen), Import ohne Duplikate (abweichende Fassung → Kopie), Schema-Version, `storage.persist()` | implementiert, Unit + E2E |
+| | Fehlergrenze (ErrorBoundary) mit Notfall-Sicherung aller Daten | implementiert |
+| | REC-Aufnahmen im Freien Board: Schreibfehler wurden bisher verschluckt → jetzt bestätigt/gemeldet, Aufnahme bleibt bei Fehler erhalten | behoben, Unit + E2E |
+| **Builder** | Vorlagen (5-Out, Horns, 1-4 hoch, 4-Out, Box-Einwurf, Einwurf gegen Presse, Fastbreak) mit automatischer Verteidigung; Rückgängig/Wiederholen; Ziel- und Umwegpunkte ziehen; Beats umsortieren; verständliche Prüfmeldungen mit Namen; Speichern trotz Fehlern (als „noch nicht abspielbar“ markiert); Zeiten in Sekunden | implementiert, E2E |
+| **Spielerinnen-Modus** | **Read-Training:** Verteidigung reagiert (Angriff steht, keine Hinweise), Spielerin entscheidet, Rückmeldung, Lösung läuft weiter; Antworten lokal protokolliert, CSV-Export | implementiert, Unit + E2E |
+| | Steuerung bleibt am Handy immer sichtbar; Schritt nochmal ↻; Zeitlupe 🐢; Kurzanleitung; Legende „?“; Tippflächen ≥ 44 px; Beschriftungen bleiben im sichtbaren Ausschnitt | implementiert, E2E, Screenshots iPhone-13-Profil |
+| **Teilen** | Geteilten Zug „In meine Spielzüge“ übernehmen (inkl. Aktualisieren/Kopie); QR-Code für die App-Adresse und kurze Links; Hinweis, wenn die Adresse nicht teilbar ist (localhost/LAN/HTTP) | implementiert, E2E |
+| **Datenschutz** | Schrift lokal gebündelt statt Google Fonts – keine Anfragen an fremde Server (E2E-Test sichert das ab) | implementiert, E2E |
+| **Tests/CI** | Playwright-Suite im Repo (`npm run e2e`), Projekte Telefon/Tablet (Chromium) und iPhone/iPad (WebKit, `E2E_WEBKIT=1`); GitHub-Workflow „Tests“ für PRs; Deploy nur mit grünen Unit-Tests | implementiert |
+
+**Bewusst nicht umgesetzt:** Konto/Cloud-Sync (bräuchte Server), Kurzlinks (bräuchte Dienst), geneigte 3D-Kamera.
 
 ## Überblick: was gebaut ist
 
@@ -19,7 +41,7 @@ Leitbild: [`NORTH_STAR.md`](NORTH_STAR.md). Der Trainer modelliert Basketball, d
 | Teilen per Link / Datei / System-Teilen | implementiert, getestet | `src/studio/ShareSheet.jsx` |
 | Zweites Referenzszenario Pick & Roll (Show / Switch) | implementiert, getestet | `src/play/plays/pickRoll.js` |
 | Figuren 2.0 (Füße, Standbreite, Schrittbewegung, Zoom-Skalierung) | implementiert | `src/render/Player25D.jsx` |
-| QR-Code | **nicht umgesetzt** (Begründung unten) | – |
+| QR-Code | für App-Adresse und kurze Links (Spielzug-Links sind meist 3–6 kB, zu groß) | `src/ui/Qr.jsx` |
 | Geneigte Kamera / 3D | **nicht umgesetzt**, bewusst zurückgestellt (Begründung unten) | – |
 | Beschriftungen ohne Überlappung (automatisch) | **nicht umgesetzt** | – |
 
@@ -144,6 +166,12 @@ Alle Ebenen sind zuschaltbar und stehen nur in der Trainer-Ansicht. Sie tragen s
 
 ## Was getestet wurde
 
+> Stand dritter Durchlauf: **102 Unit-Tests** (`npm test`) und **42 Browser-Tests** (`npm run e2e`, je 21 auf Telefon- und Tablet-Profil, Chromium) – alle grün.
+> Die Browser-Suite deckt jetzt auch Startbildschirm, Builder-Datensicherheit (Bestätigung, Entwurf, Rückfrage, voller Speicher), Read-Training, QR/Teilen-Hinweise, REC-Speicherfehler und „keine fremden Server“ ab.
+> WebKit (iPhone/iPad-Profil) läuft in CI; lokal ist keine WebKit-Engine installiert. Echte Geräte: siehe GERAETETEST.md – **noch nicht durchgeführt**.
+
+Ergebnisse des zweiten Durchlaufs:
+
 - **Build:** `npm run build` ok (PWA-Service-Worker wird erzeugt).
 - **Automatische Tests:** `npm test` mit **83 Tests** (node:test, keine neue Dependency):
   - Modell, Validierung und Bewegungsprofile.
@@ -169,11 +197,12 @@ Alle Ebenen sind zuschaltbar und stehen nur in der Trainer-Ansicht. Sie tragen s
 
 ## Bekannte Schwächen
 
-- **Beschriftungen** (FREI, Callouts, ZIEL, ACHTE AUF) werden nicht automatisch entzerrt und können sich in dichten Szenen überlappen.
+- **Beschriftungen** (FREI, Callouts, ZIEL, ACHTE AUF) bleiben jetzt im sichtbaren Ausschnitt, werden aber nicht gegeneinander entzerrt und können sich in dichten Szenen überlappen.
+- **Read-Training** setzt voraus, dass der erste Beat einer Option die Reaktion der Verteidigung zeigt (so sind beide Beispiele gebaut). Beginnt eine Option sofort mit der Lösung des Angriffs, sieht die Spielerin im Training nur die Verteidigung – das ist gewollt, sollte aber beim Bauen eigener Reads bekannt sein.
+- **iOS:** Safari und installierte App haben getrennte Speicher; Messenger-Browser speichern oft nicht dauerhaft (in PILOT.md dokumentiert, nicht technisch lösbar ohne Server).
 - **Builder:**
-  - Wegpunkte (Umwege) lassen sich nicht setzen, nur ein Ziel pro Aktion.
-  - Beats lassen sich nicht umsortieren.
   - Figuren der Aufstellung lassen sich nicht ausblenden (immer 5 gegen 5).
+  - Beats lassen sich nur innerhalb eines Abschnitts (Stamm oder Option) umsortieren.
   - Der Builder ist für Tablet und Desktop optimiert, am Handy geht er, ist aber eng.
 - **Keine Kollisionsvermeidung:** Beim Switch steht X1 bewusst eng hinter der 5 und wird teilweise verdeckt.
 - **Trap-Slots** sind weiterhin auf Seitenlinien-Traps in Angriffsrichtung zugeschnitten.
@@ -183,9 +212,9 @@ Alle Ebenen sind zuschaltbar und stehen nur in der Trainer-Ansicht. Sie tragen s
 
 ## Nächste sinnvolle Schritte
 
-1. **Test mit echten Nutzerinnen:** eine U14/U16-Mannschaft den geteilten Press Break am eigenen Handy durchgehen lassen und beobachten, wo sie hängen bleibt.
-2. **Beschriftungen ohne Überlappung**, dazu Hinweise am Bildrand, wenn das Signal außerhalb des Ausschnitts liegt.
-3. **Builder:** Wegpunkte, Beat-Reihenfolge, Aktionen auf mehrere Spielerinnen kopieren, Vorlagen (Aufstellungen wie Horns, 5-Out).
+1. **Freigabe und Pilot-Deployment** nach PILOT.md (GitHub Pages, kostenlos) – danach **Gerätetest** (GERAETETEST.md) und **Praxistest** (PRAXISTEST.md) mit einer U14/U16-Mannschaft.
+2. **Befunde des Praxistests** priorisieren (blockierend/störend/Wunsch) und umsetzen.
+3. **Beschriftungen ohne Überlappung**; Builder: Aktionen auf mehrere Spielerinnen kopieren, Figuren ausblenden.
 4. **Legacy-Presets migrieren** (Horns, Triangle, 2-3-Zone mit Rotations-Reads) und danach das Keyframe-System entfernen.
 5. **Prototyp geneigte Kamera** nur für die Präsentation am Tablet; Entscheidung nach Vergleich am Trap und am Screen.
 6. **Teilen mit Kurzlink/QR,** falls gewünscht: braucht einen (ggf. kostenlosen) Dienst und deine Freigabe.

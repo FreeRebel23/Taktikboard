@@ -34,18 +34,25 @@ Handy/Tablet (gleiches WLAN) im Browser öffnen.
 ## Tests
 
 ```bash
-npm test           # Play-Modell, Animation Engine, Press-Break-Szenario (node:test)
+npm test           # Unit-Tests: Modell, Engine, Varianten, Read-Training, Speicher, Teilen (node:test)
+npm run e2e        # Browser-Tests (Playwright): Telefon- und Tablet-Profil, baut vorher automatisch
+E2E_WEBKIT=1 npm run e2e   # zusätzlich iPhone/iPad (WebKit) – vorher: npx playwright install webkit
 ```
 
+Die Browser-Tests laufen in GitHub Actions für jeden Pull Request (Workflow „Tests“).
+Für echte Geräte: [`GERAETETEST.md`](GERAETETEST.md). Pilot und Veröffentlichung: [`PILOT.md`](PILOT.md).
+
 ## Nutzung in Kürze
-- **Bibliothek:** ★ eingebaute Spielzüge, ◆ eigene Spielzüge, „+ Neues Play“ (startet mit der aktuellen Aufstellung), „Import“ (`.taktik.json`).
+- **Startbildschirm:** eigene Spielzüge und Beispiele; „+ Neuer Spielzug“ (Vorlage wählen), „Importieren“, „Sicherung herunterladen“, „App teilen“ (QR-Code), „Freies Board“.
 - **Trainer:** Varianten (Reads) zeigen, Fokus-Kamera, Analyse-Ebenen (Modell-Einschätzung), Zeichnen.
-- **Spielerin:** Position wählen („Ich bin die 5“), mit „Weiter“ Beat für Beat: Aufgabe, Wann, Achte auf, Ziel und Haltung, Read-Entscheidungen.
-- **Bearbeiten:** Figur antippen → Aktion → Ziel antippen; Coaching pro Rolle; „+ Read“ für Varianten.
+- **Spielerin:** Position wählen („Ich bin die 5“), mit „Weiter“ Beat für Beat: Aufgabe, Wann, Achte auf, Ziel und Haltung; am Read das **Read-Training** (Verteidigung ansehen → entscheiden → Rückmeldung).
+- **Bearbeiten:** Figur antippen → Aktion → Ziel antippen; Ziel/Umweg ziehen; Rückgängig; Coaching pro Rolle; „+ Read“ für Varianten. Speichern wird bestätigt, Entwürfe werden automatisch gesichert.
 - **Teilen:** Link (öffnet direkt die Spielerinnen-Ansicht), System-Teilen oder Datei – ohne Konto und ohne Server.
 
 ## Aufbau
-- `src/Taktikboard.jsx` – Bibliothek + Freimodus (Drag, Zeichnen, Legacy-Presets, REC)
+- `src/Taktikboard.jsx` – App-Hülle (Startbildschirm, Import/Sicherung, geteilte Links)
+- `src/home/` – Startbildschirm, Neuer Spielzug · `src/board/` – Freies Board (Drag, Zeichnen, Legacy-Presets, REC)
+- `e2e/`, `playwright.config.js` – Browser-Tests
 - `src/studio/` – Play-Studio: Trainer-, Spielerinnen- und Bearbeiten-Ansicht, Teilen
 - `src/play/` – Basketball-Kern ohne UI: Datenmodell, Varianten, Engine, Analyse, Kamera, Plays
 - `src/render/` – 2,5D-Spielerinnen, Ball, taktische Ebenen
