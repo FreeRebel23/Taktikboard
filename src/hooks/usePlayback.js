@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 
 /* Zeitsteuerung für aktionsbasierte Plays (Sekunden).
    play/pause, seek (Scrubbing), playTo (Schritt bis zur nächsten Beat-Grenze), Tempo. */
-export default function usePlayback(total) {
+export default function usePlayback(total, resetKey = total) {
   const [time, setTimeState] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -30,8 +30,9 @@ export default function usePlayback(total) {
     return () => cancelAnimationFrame(raf);
   }, [playing, total]);
 
-  // Neues Play → zurück an den Anfang
-  useEffect(() => { stopAt.current = null; setPlaying(false); setTime(0); }, [total]);
+  // Neues Play → zurück an den Anfang; neue Variante → Zeit behalten (begrenzt)
+  useEffect(() => { stopAt.current = null; setPlaying(false); setTime(0); }, [resetKey]);
+  useEffect(() => { if (timeRef.current > total) setTime(total); }, [total]);
 
   const pause = useCallback(() => { stopAt.current = null; setPlaying(false); }, []);
   const seek = useCallback((t) => { stopAt.current = null; setPlaying(false); setTime(Math.max(0, Math.min(total, t))); }, [total]);

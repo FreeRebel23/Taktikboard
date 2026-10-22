@@ -42,7 +42,7 @@ export function PassFlight({ ball }) {
 }
 
 export default function Ball25D({ ball, onDown, interactive }) {
-  const { sv } = useView();
+  const { sv, figScale = 1 } = useView();
   const z = ball.z ?? 0;
   const sh = sv(0.6, 0.8);
   const lift = sv(0, -z * Z_SCREEN);
@@ -52,7 +52,7 @@ export default function Ball25D({ ball, onDown, interactive }) {
       style={{ cursor: interactive ? "grab" : "default", touchAction: "none" }}>
       <circle cx={ball.x + sh.x} cy={ball.y + sh.y} r={2.9 * shadowScale}
         fill="#000" opacity={0.38 * shadowScale} />
-      <g transform={`translate(${ball.x + lift.x},${ball.y + lift.y})`}>
+      <g transform={`translate(${ball.x + lift.x},${ball.y + lift.y}) scale(${figScale})`}>
         <circle r="3.3" fill="url(#ball-grad)" stroke="#3A2410" strokeWidth="0.55" />
         <path d="M -3.3 0 H 3.3 M 0 -3.3 V 3.3 M -2.3 -2.3 Q 0 0 -2.3 2.3 M 2.3 -2.3 Q 0 0 2.3 2.3"
           stroke="#3A2410" strokeWidth="0.4" fill="none" />

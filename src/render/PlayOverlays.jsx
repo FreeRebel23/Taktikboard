@@ -8,7 +8,7 @@ const teamColor = (team) => (team === "defense" ? DEF_COLOR : OFF_COLOR);
 const pathD = (pts) => pts.map((p, i) => `${i ? "L" : "M"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ");
 
 /** Beschriftung, immer aufrecht. anchor "start"/"end": x ist die linke/rechte Kante (Bildschirm). */
-function Pill({ x, y, text, color, ink = "#16110C", size = 4.2, anchor = "middle" }) {
+export function Pill({ x, y, text, color, ink = "#16110C", size = 4.2, anchor = "middle" }) {
   const { textRot } = useView();
   const w = text.length * size * 0.68 + 4; // fette Versalien
   const x0 = anchor === "start" ? 0 : anchor === "end" ? -w : -w / 2;
@@ -80,11 +80,11 @@ export function LaneOverlay({ lanes, players }) {
 
 /** Taktische Linie quer über das Feld (z. B. 1. Presslinie) */
 export function LineOverlay({ line }) {
-  const { landscape, sv } = useView();
+  const { landscape, sv, visible } = useView();
   const color = line.beaten ? OPEN_COLOR : TRAP_COLOR;
-  // Beschriftung am oberen/linken Bildschirmrand, knapp über der Linie
+  // Beschriftung am oberen/linken Rand des SICHTBAREN Ausschnitts, knapp über der Linie
   const off = sv(0, -4.6);
-  const lx = landscape ? COURT_W - 2 : 2;
+  const lx = landscape ? Math.min(COURT_W - 2, (visible?.x1 ?? COURT_W) - 2) : Math.max(2, (visible?.x0 ?? 0) + 2);
   return (
     <g pointerEvents="none" opacity={line.beaten ? 0.7 : 0.9}>
       <line x1="0" y1={line.y} x2={COURT_W} y2={line.y} stroke={color} strokeWidth={line.beaten ? 0.8 : 1.2}

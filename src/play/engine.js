@@ -33,9 +33,9 @@ const TRAIL_STEPS = 8;
 const TRAIL_DT = 0.07;
 
 export const TRAP_RADIUS = 11;
-const LANE_NEAR_RADIUS = 12;         // Verteidigerinnen direkt an der Passgeberin (Trap, On-Ball)
-const LANE_REACH = 8;                // Armreichweite einer nahen Verteidigerin (Einheiten)
-const LANE_MAX_LENGTH = 100;         // > 10 m gegen Presse: riskanter langer Pass
+export const LANE_NEAR_RADIUS = 12;         // Verteidigerinnen direkt an der Passgeberin (Trap, On-Ball)
+export const LANE_REACH = 8;                // Armreichweite einer nahen Verteidigerin (Einheiten)
+export const LANE_MAX_LENGTH = 100;         // > 10 m gegen Presse: riskanter langer Pass
 const HAND_RADIUS = 5.2;
 
 /* ------------------------------------------------------------------ */

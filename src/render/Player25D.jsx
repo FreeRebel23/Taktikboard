@@ -76,8 +76,50 @@ export function PlayerTrail({ p }) {
   );
 }
 
-export default function Player25D({ p, onDown, interactive, dim = false }) {
-  const { sv, textRot } = useView();
+const WIDE = new Set(["on-ball", "trap", "deny", "closeout", "arms-up", "screen", "defense"]);
+
+/** Füße im Körper-Koordinatensystem: [x, y] je Fuß (x = vorne) */
+export function feetFor(p, phase = 0) {
+  if (p.speed > 6) {
+    const a = Math.min(3.4, p.speed / 11);
+    const k = Math.sin(phase * (2.2 + p.speed / 14));
+    return [[a * k, -2.3], [-a * k, 2.3]];
+  }
+  if (WIDE.has(p.stance) || p.footStance === "wide") return [[-0.6, -5.4], [-0.6, 5.4]];
+  if (p.hasBall || p.footStance === "stagger") return [[1.4, -2.9], [-1.5, 3.1]];
+  return [[0.3, -2.7], [0.3, 2.7]];
+}
+
+function Feet({ p, phase, color, ghost }) {
+  return feetFor(p, phase).map(([x, y], i) => (
+    <ellipse key={i} cx={x} cy={y} rx="2.3" ry="1.25" fill={ghost ? "none" : color}
+      stroke={ghost ? color : "#1B1410"} strokeWidth={ghost ? 0.7 : 0.35} strokeDasharray={ghost ? "1 0.8" : undefined}
+      opacity={ghost ? 0.95 : 0.9} />
+  ));
+}
+
+/** Zielfigur: wo und wie die Spielerin am Ende des Laufwegs steht */
+export function PlayerGhost({ p }) {
+  const { textRot, figScale = 1 } = useView();
+  const s = TEAM_STYLE[p.team];
+  return (
+    <g transform={`translate(${p.x},${p.y}) scale(${figScale})`} pointerEvents="none">
+      <circle r="7.2" fill={s.base} fillOpacity="0.1" stroke={s.light} strokeWidth="0.9" strokeDasharray="2 1.4" />
+      <g transform={`rotate(${p.body * DEG})`}>
+        <Feet p={p} phase={0} color={s.light} ghost />
+        <rect x="-2.5" y="-6.6" width="5" height="13.2" rx="2.5" fill="none" stroke={s.light} strokeWidth="0.8" strokeDasharray="1.6 1" />
+        <path d="M 3 -2.9 L 7 0 L 3 2.9 Z" fill={s.light} opacity="0.85" />
+      </g>
+      <g transform={`rotate(${textRot})`}>
+        <text textAnchor="middle" dy="1.6" fontSize="4.2" fontWeight="800" fill={s.light} opacity="0.9"
+          style={{ fontFamily: "inherit" }}>{p.label}</text>
+      </g>
+    </g>
+  );
+}
+
+export default function Player25D({ p, onDown, interactive, dim = false, me = false, phase = 0 }) {
+  const { sv, textRot, figScale = 1 } = useView();
   const s = TEAM_STYLE[p.team];
   const shadow = sv(1.8, 2.4);
   const liftB = sv(0, LIFT_BODY);
@@ -90,7 +132,7 @@ export default function Player25D({ p, onDown, interactive, dim = false }) {
   const long = p.label.length > 1;
 
   return (
-    <g transform={`translate(${p.x},${p.y})`} opacity={dim ? 0.55 : 1}
+    <g transform={`translate(${p.x},${p.y}) scale(${figScale})`} opacity={dim ? 0.38 : 1}
       onPointerDown={interactive ? (e) => onDown(e, p.id) : undefined}
       style={{ cursor: interactive ? "grab" : "default", touchAction: "none" }}>
       {/* Schatten */}
@@ -101,6 +143,9 @@ export default function Player25D({ p, onDown, interactive, dim = false }) {
         <circle r="8.6" fill="none" stroke={p.trapped ? "#E0463A" : "#FFD166"} strokeWidth="1.2"
           className={p.trapped ? "tb-pulse" : undefined} />
       )}
+
+      {/* Eigene Spielerin (Spielerinnen-Modus) */}
+      {me && <circle r="10.2" fill="#FFFFFF" fillOpacity="0.07" stroke="#FFFFFF" strokeWidth="1.1" strokeOpacity="0.85" />}
 
       {/* Bodenring */}
       <circle r="6.3" fill={s.base} fillOpacity="0.16" stroke={s.base} strokeWidth="0.9" strokeOpacity="0.9" />
@@ -117,6 +162,11 @@ export default function Player25D({ p, onDown, interactive, dim = false }) {
             strokeLinecap="round" strokeLinejoin="round" />
         </g>
       )}
+
+      {/* Füße am Boden: Standbreite und Schrittbewegung */}
+      <g transform={`rotate(${bodyDeg})`}>
+        <Feet p={p} phase={phase} color={s.dark} />
+      </g>
 
       {/* Oberkörper */}
       <g transform={`translate(${liftB.x},${liftB.y}) rotate(${bodyDeg})`}>
