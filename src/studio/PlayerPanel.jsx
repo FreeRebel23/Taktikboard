@@ -49,7 +49,7 @@ export function HowTo() {
   );
   return (
     <div style={{ display: "grid", gap: 6, fontSize: 14, lineHeight: 1.4, color: C_UI.muted }}>
-      {row(1, "Tippe deine Nummer an.")}
+      {row(1, <>Tippe deine Nummer an – oder <strong style={{ color: C_UI.text }}>Team</strong> für alle fünf, <strong style={{ color: C_UI.text }}>＋</strong> für mehrere.</>)}
       {row(2, <>Mit <strong style={{ color: C_UI.text }}>▶ Weiter</strong> siehst du den Spielzug Schritt für Schritt – mit deiner Aufgabe.</>)}
       {row(3, <>Bei <strong style={{ color: C_UI.warn }}>Read</strong> entscheidest du selbst: Schau, was die Verteidigung macht.</>)}
     </div>
@@ -256,6 +256,107 @@ export function PlayerControls({ time, total, playing, onPrev, onNext, onToggle,
         <IconButton active={slow} onClick={onSlow} title={slow ? "Normale Geschwindigkeit" : "Zeitlupe"} style={small}>🐢</IconButton>
         <IconButton onClick={onToggle} title={playing ? "Pause" : "Alles abspielen"} style={small}>{playing ? "❚❚" : "▶▶"}</IconButton>
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Mannschaftsperspektive                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Perspektive wählen: ganzes Team, eine Position oder Zusammenspiel mehrerer.
+ * side: "offense" | "defense"; sel: Array der gewählten IDs (1 = eine Position).
+ */
+export function PerspectivePicker({ C, side, onSide, sel, onSel, multi, onMulti, compact = false }) {
+  const ids = C.ids.filter((id) => C.entity[id].team === side);
+  const color = side === "offense" ? OFF_COLOR : DEF_COLOR;
+  const all = sel.length === ids.length && ids.every((id) => sel.includes(id));
+  const size = compact ? 44 : 50;
+  const tap = (id) => {
+    if (!multi) return onSel([id]);
+    const next = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel.filter((x) => ids.includes(x)), id];
+    onSel(next.length ? next : [id]);
+  };
+  const chip = (on) => ({
+    minHeight: 44, minWidth: 44, padding: "0 10px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 13,
+    border: `1.5px solid ${on ? C_UI.white : C_UI.border}`, background: on ? color : "transparent", color: on ? "#16110C" : C_UI.text,
+  });
+  return (
+    <div role="group" aria-label="Perspektive" style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+      <button onClick={() => onSel(ids)} aria-pressed={all} title={side === "offense" ? "Ganzes Team – Angriff" : "Ganzes Team – Verteidigung"} style={chip(all)}>Team</button>
+      {ids.map((id) => {
+        const on = !all && sel.includes(id);
+        return (
+          <button key={id} onClick={() => tap(id)} aria-pressed={on} title={`Ich bin ${C.entity[id].label}`}
+            style={{
+              width: size, height: size, borderRadius: 999, cursor: "pointer", padding: 0,
+              border: `2px solid ${on ? C_UI.white : color}`, background: on ? color : "transparent",
+              color: on ? "#16110C" : C_UI.text, fontFamily: "inherit", fontWeight: 800, fontSize: compact ? 15 : 17,
+            }}>{C.entity[id].label}</button>
+        );
+      })}
+      <button onClick={onMulti} aria-pressed={multi} title={multi ? "Zusammenspiel: mehrere Positionen wählen (an)" : "Zusammenspiel: mehrere Positionen wählen"}
+        style={{ ...chip(false), borderStyle: multi ? "solid" : "dashed", color: multi ? C_UI.warn : C_UI.muted }}>＋</button>
+      <button onClick={onSide} title={side === "offense" ? "Zur Verteidigung wechseln" : "Zum Angriff wechseln"}
+        style={{ ...chip(false), color: C_UI.muted }}>{side === "offense" ? "Abwehr ⇄" : "Angriff ⇄"}</button>
+    </div>
+  );
+}
+
+/** Prinzipien des Beats: Titel als Chips, Regel + Warum zum Aufklappen */
+export function PrincipleList({ principles }) {
+  const [open, setOpen] = useState(null);
+  if (!principles?.length) return null;
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      <Label color={C_UI.open}>Prinzip{principles.length > 1 ? "ien" : ""}</Label>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {principles.map((p) => (
+          <button key={p.id} onClick={() => setOpen(open === p.id ? null : p.id)} aria-expanded={open === p.id}
+            style={{ minHeight: 36, padding: "4px 10px", borderRadius: 999, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 13,
+              border: `1px solid ${open === p.id ? C_UI.open : "rgba(95,211,141,0.4)"}`, background: open === p.id ? "rgba(95,211,141,0.18)" : "transparent", color: "#CFF5DE" }}>
+            {p.title}
+          </button>
+        ))}
+      </div>
+      {open && (() => {
+        const p = principles.find((x) => x.id === open);
+        return (
+          <div style={{ fontSize: 14, lineHeight: 1.45, padding: "8px 10px", borderRadius: 10, background: "rgba(95,211,141,0.08)" }}>
+            <div style={{ color: C_UI.text }}>{p.rule}</div>
+            {p.why && <div style={{ color: C_UI.muted, marginTop: 4 }}><strong style={{ color: C_UI.open }}>Warum? </strong>{p.why}</div>}
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+/** Eine Zeile pro Spielerin: Aufgabe jetzt + (Verteidigung) aktueller Zustand. Antippen = diese Position */
+export function TeamCard({ C, rows, title, onPick }) {
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      {title && <Label>{title}</Label>}
+      {rows.map((r) => {
+        const color = C.entity[r.id].team === "offense" ? OFF_COLOR : DEF_COLOR;
+        return (
+          <button key={r.id} onClick={() => onPick?.(r.id)} title={`Nur ${C.entity[r.id].label} zeigen`}
+            style={{ display: "flex", gap: 10, alignItems: "flex-start", textAlign: "left", padding: "8px 10px", borderRadius: 12, cursor: onPick ? "pointer" : "default",
+              border: `1px solid ${C_UI.line}`, background: C_UI.card, color: C_UI.text, fontFamily: "inherit" }}>
+            <span style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 15, display: "grid", placeItems: "center", fontWeight: 800, fontSize: 13,
+              background: color, color: "#16110C" }}>{C.entity[r.id].label}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              {r.state && (
+                <span style={{ display: "inline-block", marginBottom: 3, padding: "1px 7px", borderRadius: 999, fontSize: 11, fontWeight: 800, letterSpacing: "0.05em",
+                  background: r.stateColor, color: "#14181C" }}>{r.state}{r.resp ? ` · ${C.entity[r.resp]?.label ?? ""}` : ""}</span>
+              )}
+              <span style={{ display: "block", fontSize: 14, lineHeight: 1.35, fontWeight: 600 }}>{r.task}</span>
+              {r.why && <span style={{ display: "block", fontSize: 12.5, lineHeight: 1.35, color: C_UI.muted, marginTop: 2 }}>{r.why}</span>}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

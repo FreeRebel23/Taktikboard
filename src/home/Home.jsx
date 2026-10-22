@@ -54,6 +54,7 @@ function PlayCard({ play, updatedAt, builtin, onOpen, onPlayer, onEdit, onShare,
           <h3 style={{ margin: 0, fontSize: 17, lineHeight: 1.25, overflowWrap: "anywhere" }}>{play.name}</h3>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4, alignItems: "center" }}>
             <Chip tone="#2A333B" ink={C_UI.muted}>{play.court === "half" ? "Halbfeld" : "Ganzfeld"}</Chip>
+            {play.category === "defense" && <Chip tone="rgba(91,139,178,0.25)" ink="#CFE2F2">Verteidigung</Chip>}
             {info.variants > 1 && <Chip tone="rgba(255,209,102,0.18)" ink="#FFE9B3">{info.variants} Varianten</Chip>}
             {!info.ok && <Chip tone="rgba(224,70,58,0.2)" ink="#FFB4A8">unvollständig</Chip>}
             {updatedAt && <span style={{ fontSize: 12, color: C_UI.dim }}>gespeichert {dateFmt(updatedAt)}</span>}
@@ -63,7 +64,7 @@ function PlayCard({ play, updatedAt, builtin, onOpen, onPlayer, onEdit, onShare,
       </div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         <button style={btn(true)} onClick={onOpen} disabled={!info.ok} title={info.ok ? "Ansehen" : "Erst im Builder vervollständigen"}>Ansehen</button>
-        <button style={btn(false)} onClick={onPlayer} disabled={!info.ok}>Als Spielerin</button>
+        <button style={btn(false)} onClick={onPlayer} disabled={!info.ok}>Lernen</button>
         <button style={btn(false)} onClick={onEdit}>{builtin ? "Kopie bearbeiten" : "Bearbeiten"}</button>
         <button style={btn(false)} onClick={onShare} disabled={!info.ok}>Teilen</button>
         {onMore && <button style={btn(false)} onClick={onMore} aria-label={`Weitere Aktionen für ${play.name}`} title="Weitere Aktionen">⋯</button>}
@@ -147,14 +148,16 @@ export default function Home({
           ))}
         </section>
 
-        <section style={section} aria-label="Beispiele">
-          <h2 style={h2}>Beispiele</h2>
-          {builtins.map((play) => (
-            <PlayCard key={play.id} play={play} builtin
-              onOpen={() => onOpen(play, "builtin", "coach")} onPlayer={() => onOpen(play, "builtin", "player")}
-              onEdit={() => onOpen(play, "builtin", "edit")} onShare={() => onShare(play)} />
-          ))}
-        </section>
+        {[["offense", "Beispiele – Angriff"], ["defense", "Beispiele – Verteidigung"]].map(([cat, title]) => (
+          <section key={cat} style={section} aria-label={title}>
+            <h2 style={h2}>{title}</h2>
+            {builtins.filter((p) => (p.category ?? "offense") === cat).map((play) => (
+              <PlayCard key={play.id} play={play} builtin
+                onOpen={() => onOpen(play, "builtin", "coach")} onPlayer={() => onOpen(play, "builtin", "player")}
+                onEdit={() => onOpen(play, "builtin", "edit")} onShare={() => onShare(play)} />
+            ))}
+          </section>
+        ))}
 
         {readLog.length > 0 && (
           <section style={{ ...section, gap: 6 }} aria-label="Read-Training">

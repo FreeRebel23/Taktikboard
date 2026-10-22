@@ -132,7 +132,7 @@ export default function Player25D({ p, onDown, interactive, dim = false, me = fa
   const long = p.label.length > 1;
 
   return (
-    <g transform={`translate(${p.x},${p.y}) scale(${figScale})`} opacity={dim ? 0.38 : 1}
+    <g transform={`translate(${p.x},${p.y}) scale(${figScale})`} opacity={dim ? 0.6 : 1}
       onPointerDown={interactive ? (e) => onDown(e, p.id) : undefined}
       style={{ cursor: interactive ? "grab" : "default", touchAction: "none" }}>
       {/* Schatten */}

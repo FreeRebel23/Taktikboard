@@ -33,7 +33,7 @@ test("Trainer erstellt Spielzug aus Vorlage, speichert bestätigt, er überlebt 
   await page.reload();
   await expect(card(page, "Backdoor 2")).toBeVisible();
   // Als Spielerin ansehen
-  await card(page, "Backdoor 2").getByRole("button", { name: "Als Spielerin" }).click();
+  await card(page, "Backdoor 2").getByRole("button", { name: "Lernen" }).click();
   await page.getByTitle("Ich bin 2").click();
   await expect(page.getByText("Deine Aufgabe")).toBeVisible();
   noErrors();

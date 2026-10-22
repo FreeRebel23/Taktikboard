@@ -50,6 +50,12 @@ export function relatedIds(C, beatIndex, me) {
   const role = describeRole(C, beatIndex, me);
   if (role.watch && role.watch !== "ball" && C.entity[role.watch]) ids.add(role.watch);
   for (const p of b.passes) if (p.from === me || p.to === me) { ids.add(p.from); ids.add(p.to); }
+  // Mannschaftsverteidigung: wen verantworte ich im Beat / wer verantwortet mich?
+  const sim = b.cache?.get("sim");
+  if (sim) {
+    for (const r of sim.resp[me] ?? []) if (r) ids.add(r);
+    for (const [d, list] of Object.entries(sim.resp)) if (list.includes(me)) ids.add(d);
+  }
   for (const [pid, acts] of b.byPlayer) {
     for (const a of acts) {
       if (!ACTIONS[a.type]?.implemented) continue;
@@ -73,6 +79,18 @@ export function playerCamera(C, beatIndex, me) {
     pts.push({ x: f.ball.x, y: f.ball.y });
   }
   return finish(C, bboxOf(pts), { pad: 18, min: 84 });
+}
+
+/** Ausschnitt für mehrere Positionen (Zusammenspiel/Team): alle plus ihre Partnerinnen und der Ball */
+export function groupCamera(C, beatIndex, group) {
+  const b = C.beats[beatIndex];
+  const ids = new Set(group.flatMap((id) => relatedIds(C, beatIndex, id)));
+  const pts = [];
+  for (const f of sampleBeat(C, b)) {
+    for (const id of ids) pts.push(f.players[id]);
+    pts.push({ x: f.ball.x, y: f.ball.y });
+  }
+  return finish(C, bboxOf(pts), { pad: 20, min: 96 });
 }
 
 /** Ausschnitt für die Traineransicht: alles, was sich im Beat bewegt, plus Ball */

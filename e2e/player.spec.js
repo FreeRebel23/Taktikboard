@@ -1,10 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { openFromHome, collectErrors } from "./helpers.js";
+import { openFromHome, collectErrors, seek } from "./helpers.js";
 
 test("Spielerin: Position wählen, Aufgabe, Read, Lösung erst nach der Wahl, andere Variante", async ({ page }) => {
   const noErrors = collectErrors(page);
   await page.goto("/");
-  await openFromHome(page, "Press Break – Full Court", "Als Spielerin");
+  await openFromHome(page, "Press Break – Full Court", "Lernen");
   await expect(page.getByText("Wähle deine Position")).toBeVisible();
   await page.getByTitle("Ich bin 5").click();
   await expect(page.getByText("Deine Aufgabe")).toBeVisible();
@@ -33,8 +33,8 @@ test("Spielerin: Position wählen, Aufgabe, Read, Lösung erst nach der Wahl, an
 test("Read-Training: Verteidigung ansehen, entscheiden, Rückmeldung, Lösung läuft weiter", async ({ page }) => {
   const noErrors = collectErrors(page);
   await page.goto("/");
-  await openFromHome(page, "Press Break – Full Court", "Als Spielerin");
-  await expect(page.getByText("Tippe deine Nummer an.")).toBeVisible();
+  await openFromHome(page, "Press Break – Full Court", "Lernen");
+  await expect(page.getByText(/Tippe deine Nummer an/)).toBeVisible();
   await page.getByTitle("Ich bin 5").click();
   const weiter = page.getByRole("button", { name: /Weiter|läuft/ });
   await expect(weiter).toBeInViewport();                       // Steuerung bleibt am Handy sichtbar
@@ -77,4 +77,45 @@ test("Read-Training-Protokoll erscheint auf dem Startbildschirm und lässt sich 
   await page.getByRole("button", { name: "Zurücksetzen" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Zurücksetzen" }).click();
   await expect(page.getByText("Read-Training")).toHaveCount(0);
+});
+
+test("Mannschaftsperspektive: Team, einzelne Position, Zusammenspiel – Verteidigung als System", async ({ page }) => {
+  const noErrors = collectErrors(page);
+  await page.goto("/");
+  await openFromHome(page, "Mann-Mann – Help & Recover", "Lernen");
+  // Verteidigungs-Spielzug startet auf der Verteidigungsseite
+  await page.getByRole("button", { name: "Team", exact: true }).click();
+  await expect(page.getByText("Alle fünf in der Verteidigung")).toBeVisible();
+  for (const x of ["X1", "X2", "X3", "X4", "X5"]) await expect(page.getByTitle(`Nur ${x} zeigen`)).toBeVisible();
+  await expect(page.locator('svg text:text-is("DRUCK")')).toHaveCount(1);
+  // Prinzip aufklappen
+  await page.getByRole("button", { name: "Ball – Gegenspielerin – Korb" }).click();
+  await expect(page.getByText(/näher am Korb als sie/)).toBeVisible();
+  // Bis zum Drive: Help entsteht aus den Regeln
+  await seek(page, 4.9);
+  await expect(page.locator('svg text:text-is("HELP")')).toHaveCount(1);
+  await expect(page.getByTitle("Nur X5 zeigen")).toContainText("HELP");
+  // Eine Position antippen → Einzelansicht mit Zusammenspiel
+  await page.getByTitle("Nur X5 zeigen").click();
+  await expect(page.getByText("Deine Aufgabe")).toBeVisible();
+  await expect(page.locator('svg text:text-is("DU")')).toHaveCount(1);
+  // Zusammenspiel mehrerer Positionen
+  await page.getByTitle(/Zusammenspiel: mehrere Positionen/).click();
+  await page.getByTitle("Ich bin X2").click();
+  await expect(page.getByText("Zusammenspiel", { exact: true })).toBeVisible();
+  // Seite wechseln → Angriff als Team
+  await page.getByTitle("Zum Angriff wechseln").click();
+  await expect(page.getByText("Alle fünf im Angriff")).toBeVisible();
+  noErrors();
+});
+
+test("2-3-Zone: Übergabe beim Cut wird sichtbar", async ({ page }) => {
+  const noErrors = collectErrors(page);
+  await page.goto("/");
+  await openFromHome(page, "2-3-Zone – Verschieben und Übergeben", "Lernen");
+  await page.getByRole("button", { name: "Team", exact: true }).click();
+  await seek(page, 6.6);
+  await expect(page.locator('svg text:text-is("ÜBERGABE")')).toHaveCount(1);
+  await expect(page.getByText(/Cut durch die Zone/).first()).toBeVisible();
+  noErrors();
 });

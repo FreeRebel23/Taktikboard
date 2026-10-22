@@ -137,7 +137,6 @@ export const zone23 = {
       text: "5 schneidet von rechts über die Zone zum Ball. Sie verlässt den Raum von X4 und kommt in den Raum von X5: X4 begleitet sie bis zur Grenze, sagt sie an und übergibt. X5 übernimmt.",
       duration: 2000,
       principles: ["uebergabe", "raum"],
-      focus: [{ type: "callout", player: "o5", text: "ÜBERGABE", tone: "warn", from: 0.35, to: 0.8 }],
       roles: {
         d4: { task: "5 bis zur Raumgrenze begleiten, laut ansagen, übergeben – dann zurück in deinen Raum.", watch: "o5", why: "Sonst stehen zwei bei 5 und die rechte Seite ist frei." },
         d5: { task: "5 übernehmen, sobald sie in deinen Raum kommt: zwischen 5 und Ball.", watch: "o5", cue: "X4 ruft „Deine!“", why: "Der Block am Ball ist der gefährlichste Ort." },

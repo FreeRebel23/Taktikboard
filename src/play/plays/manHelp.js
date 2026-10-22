@@ -121,7 +121,6 @@ export const manHelp = {
       text: "2 schlägt X2 an der Grundlinie. Jetzt greift die Help-Regel: Die nächste Verteidigerin auf der Help-Seite – hier X5 – stoppt den Drive vor dem Korb. Alle anderen bleiben zwischen Ball und Gegenspielerin.",
       duration: 1500,
       principles: ["help", "dreieck"],
-      focus: [{ type: "callout", player: "d5", text: "HELP", tone: "warn", from: 0.45 }],
       roles: {
         d2: { task: "Geschlagen: hinterher und von hinten Druck machen – nicht aufgeben.", watch: "o2", why: "Je schneller du wieder da bist, desto kürzer muss X5 helfen." },
         d5: { task: "Help: vor dem Korb in den Drive steigen, beide Füße am Boden.", watch: "o2", cue: "2 ist an X2 vorbei.", stance: "defense", why: "Ein Korbleger ist der leichteste Korb – zwinge 2 zum Pass." },
@@ -145,7 +144,6 @@ export const manHelp = {
       text: "2 spielt einen Bodenpass zu 5, die X5 für die Hilfe verlassen hat. X5 erholt sich sofort (Recover) und läuft 5 kontrolliert an. X2 ist zurück bei 2 und nimmt die Mann-Mann-Regeln wieder auf.",
       duration: 1500,
       principles: ["recover", "mitdempass"],
-      focus: [{ type: "callout", player: "d5", text: "RECOVER", tone: "warn", from: 0.2 }],
       roles: {
         d5: { task: "Recover: zurück zu 5, die letzten Schritte kurz, Hand hoch.", watch: "o5", stance: "defense", why: "Du hast geholfen – jetzt ist deine Gegenspielerin frei." },
         d2: { task: "Zurück zu 2 und wieder nach den Regeln verteidigen.", watch: "ball" },
@@ -172,7 +170,6 @@ export const manHelp = {
       text: "5 spielt den Ball über Kopf zu 3 auf den Flügel. X3 war auf der Help-Seite tief abgesunken und kommt jetzt mit einem Closeout heraus. Die Help-Seite wird zur Ball-Seite: X4 und X5 stellen jetzt zu, X1 und X2 sinken auf die neue Help-Seite ab.",
       duration: 2000,
       principles: ["recover", "mitdempass", "passlaenge", "helpseite"],
-      focus: [{ type: "callout", player: "d3", text: "CLOSEOUT", tone: "warn", from: 0.3 }],
       roles: {
         d3: { task: "Closeout auf 3: sprinten, dann kurze Schritte, Hand hoch gegen den Wurf.", watch: "o3", stance: "defense", why: "Du kommst von weit – nicht überlaufen lassen." },
         d4: { task: "Jetzt eine Passlänge entfernt: Deny gegen 4.", watch: "ball", stance: "deny" },

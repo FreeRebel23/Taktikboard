@@ -11,12 +11,15 @@ import PlayControls from "../ui/PlayControls.jsx";
 import usePlayback from "../hooks/usePlayback.js";
 import { compileVariant, sampleFrame, beatDiagram, beatBoundaries } from "../play/index.js";
 import { describeRole, myMoments } from "../play/describe.js";
-import { playerCamera, actionCamera, relatedIds } from "../play/camera.js";
+import { playerCamera, actionCamera, relatedIds, groupCamera } from "../play/camera.js";
 import { passWindows } from "../play/analysis.js";
 import { AnalysisContext } from "../render/analysisContext.js";
 import { CHALK } from "../court/constants.js";
 import { C_UI, Segmented, IconButton, Chip } from "./studioUi.jsx";
-import { RolePicker, TaskCard, DecisionCard, PlayerControls, QuizCard, HowTo, Legend } from "./PlayerPanel.jsx";
+import { TaskCard, DecisionCard, PlayerControls, QuizCard, HowTo, Legend, PerspectivePicker, PrincipleList, TeamCard } from "./PlayerPanel.jsx";
+import { DEFENSE_STATES } from "../play/teamDefense.js";
+const PlayerPrinciples = ({ principles }) => (principles.length ? <PrincipleList principles={principles} /> : null);
+import { STATE_COLOR } from "../render/DefenseLayer.jsx";
 import { compileReadQuiz, quizAnswer } from "../play/readQuiz.js";
 import { logRead } from "../store/readLog.js";
 import { VariantBar, AnalysisPanel, PassWindowStrip } from "./CoachParts.jsx";
@@ -36,6 +39,10 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
   const [mode, setMode] = useState(initialMode);
   const [choices, setChoices] = useState({});
   const [me, setMe] = useState(initialMe);
+  // Perspektive: eine Position (me), mehrere (group) oder das ganze Team; Seite Angriff/Verteidigung
+  const [group, setGroup] = useState(null);
+  const [multi, setMulti] = useState(false);
+  const [side, setSide] = useState(initialMe?.[0] === "d" || (!initialMe && initialPlay.category === "defense") ? "defense" : "offense");
   const [answered, setAnswered] = useState({});
   const [analysis, setAnalysis] = useState({ lanes: false, reach: false, space: false, windows: false });
   const [showAnalysis, setShowAnalysis] = useState(false);
@@ -153,6 +160,37 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
     ghost: null, myPath: null,
   } : null;
 
+  /* ---------- Team- und Gruppenansicht ---------- */
+  const sideIds = C ? C.ids.filter((id) => C.entity[id].team === side) : [];
+  const sel = group ?? (me ? [me] : []);
+  const selectIds = (ids) => {
+    setQuiz(null);
+    if (ids.length === 1) { setMe(ids[0]); setGroup(null); }
+    else { setMe(null); setGroup(ids); }
+  };
+  const flipSide = () => {
+    const next = side === "offense" ? "defense" : "offense";
+    setSide(next); setMulti(false); setQuiz(null);
+    setMe(null); setGroup(C.ids.filter((id) => C.entity[id].team === next));
+  };
+  const groupCam = useMemo(() => (C && mode === "player" && group && playerCam ? groupCamera(C, displayBeat, group) : null),
+    [C, mode, group?.join(","), displayBeat, variantKey, playerCam]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shownFrame = quizFrame ?? frame;
+  const groupView = group && shownFrame ? {
+    focus: new Set([...group, ...group.map((id) => shownFrame.players[id]?.defense?.resp).filter(Boolean)]),
+    defenseLabels: "all",
+  } : null;
+  const rowFor = (id, f = frame) => {
+    const r = describeRole(C, displayBeat, id);
+    const dz = f?.players[id]?.defense;
+    return {
+      id, task: r.task, why: r.why,
+      state: dz ? DEFENSE_STATES[dz.state]?.label : null, stateColor: dz ? STATE_COLOR[dz.state] : null, resp: dz?.resp ?? null,
+    };
+  };
+  const beatPrinciples = C ? (C.beats[displayBeat]?.beat.principles ?? []).map((pid) => play.principles?.find((x) => x.id === pid)).filter(Boolean) : [];
+  const partners = C && me ? relatedIds(C, displayBeat, me).filter((id) => id !== me && C.entity[id]?.team === C.entity[me].team) : [];
+
   /* ---------- Steuerung ---------- */
   const nextBoundary = () => bounds.find((b) => b > time + EPS);
   const prevBoundary = () => [...bounds].reverse().find((b) => b < time - 0.05) ?? 0;
@@ -231,7 +269,7 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
   }
 
   const diagram = C && showPaths && !quiz ? beatDiagram(C, mode === "player" ? displayBeat : frame.beatIndex) : null;
-  const camera = quiz ? quizCamera : mode === "player" ? playerInfo?.camera : coachCamera;
+  const camera = quiz ? quizCamera : mode === "player" ? (group ? groupCam : playerInfo?.camera) : coachCamera;
   const replayBeat = () => { const b = C.beats[frame.beatIndex]; playback.seek(b.t0); playback.playTo(b.t1); };
 
   return (
@@ -250,7 +288,7 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
         <Segmented label="Ansicht" value={mode} onChange={(m) => { if (m === "player") setAnswered({}); setQuiz(null); setMode(m); setTool(null); }}
           options={[
             { value: "coach", label: "Trainer" },
-            { value: "player", label: "Spielerin" },
+            { value: "player", label: "Lernen", title: "Lernen: Team, einzelne Position oder Zusammenspiel" },
             { value: "edit", label: "Bearbeiten" },
           ]} />
         {origin === "shared" && (
@@ -303,7 +341,7 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
         <CourtStage courtType={play.court} camera={camera} onCourtDown={onDown} onCourtMove={onMove} onCourtUp={onUp}
           onGestureStart={() => { stroke.current = null; }}>
           <AnalysisContext.Provider value={C}>
-            <PlayScene frame={quizFrame ?? frame} diagram={diagram} showDef={showDef} player={quiz ? quizScene : sceneInfo}
+            <PlayScene frame={quizFrame ?? frame} diagram={diagram} showDef={showDef} player={quiz ? quizScene : sceneInfo} view={mode === "player" ? groupView : null}
               analysis={mode === "coach" && showAnalysis ? analysis : null} />
           </AnalysisContext.Provider>
           <g pointerEvents="none">
@@ -322,6 +360,7 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
         {C && mode === "coach" && (
           <>
             <VariantBar decisions={C.play.variant.decisions} choices={choices} onChoose={chooseCoach} />
+            <PlayerPrinciples principles={beatPrinciples} />
             {showAnalysis && <AnalysisPanel analysis={analysis} onChange={setAnalysis} />}
             {windows && showAnalysis && <PassWindowStrip C={C} windows={windows} time={time} onSeek={playback.seek} />}
             <PlayControls compiled={C} frame={frame} playback={playback}
@@ -338,16 +377,17 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
         )}
 
         {C && mode === "player" && (
-          !me ? (
+          !me && !group ? (
             <div style={{ display: "grid", gap: 12 }}>
-              <div style={{ fontSize: 17, fontWeight: 800 }}>Wähle deine Position</div>
+              <div style={{ fontSize: 17, fontWeight: 800 }}>Wähle deine Position – oder das ganze Team</div>
               <HowTo />
-              <RolePicker C={C} me={me} onPick={(id) => { setMe(id); playback.seek(0); }} />
+              <PerspectivePicker C={C} side={side} onSide={() => setSide(side === "offense" ? "defense" : "offense")} sel={sel}
+                onSel={(ids) => { selectIds(ids); playback.seek(0); }} multi={multi} onMulti={() => setMulti((v) => !v)} />
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 0, flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                <RolePicker C={C} me={me} onPick={(id) => { setMe(id); setQuiz(null); }} compact />
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 6, flexShrink: 0 }}>
+                <PerspectivePicker C={C} side={side} onSide={flipSide} sel={sel} onSel={selectIds} multi={multi} onMulti={() => setMulti((v) => !v)} compact />
                 <span style={{ flex: 1 }} />
                 <IconButton onClick={() => setHelp(true)} title="Hilfe und Legende" style={{ height: 44, minWidth: 44 }}>?</IconButton>
               </div>
@@ -370,6 +410,22 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
                     ))}
                     {playerInfo && <TaskCard C={C} role={playerInfo.role} beat={C.beats[displayBeat].beat} beatIndex={displayBeat}
                       total={C.beats.length} frameBeatTitle={C.beats[displayBeat].beat.title} />}
+                    {group && (
+                      <>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          <Chip tone={C_UI.accent} ink="#16110C">Beat {displayBeat + 1}/{C.beats.length}</Chip>
+                          <span style={{ fontWeight: 800, fontSize: 14 }}>{C.beats[displayBeat].beat.title}</span>
+                        </div>
+                        {C.beats[displayBeat].beat.text && <div style={{ fontSize: 14, lineHeight: 1.45, color: "#C9D1D7" }}>{C.beats[displayBeat].beat.text}</div>}
+                        <TeamCard C={C} title={group.length === sideIds.length ? (side === "offense" ? "Alle fünf im Angriff" : "Alle fünf in der Verteidigung") : "Zusammenspiel"}
+                          rows={group.map((id) => rowFor(id))} onPick={(id) => selectIds([id])} />
+                      </>
+                    )}
+                    {me && partners.length > 0 && (
+                      <TeamCard C={C} title="Zusammenspiel – darauf kommt es mit an" rows={partners.map((id) => rowFor(id))}
+                        onPick={(id) => selectIds([me, id])} />
+                    )}
+                    <PrincipleList principles={beatPrinciples} />
                     {atEnd && (
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <IconButton onClick={() => { setAnswered({}); playback.seek(0); }} title="Von vorn">↺ Von vorn</IconButton>
