@@ -119,6 +119,12 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
     const d = decisions.find((x) => x.decision.id === decisionId);
     if (d && time > d.t + EPS) playback.seek(d.t);
   };
+  // Trainer wählt eine Variante zum Zeigen – das ist keine Antwort der Spielerin
+  const chooseCoach = (decisionId, optionId) => {
+    setChoices((c) => ({ ...c, [decisionId]: optionId }));
+    const d = decisions.find((x) => x.decision.id === decisionId);
+    if (d && time > d.t + EPS) playback.seek(d.t);
+  };
   const otherVariant = () => {
     const d = decisions[decisions.length - 1];
     if (!d) return;
@@ -183,7 +189,7 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
           <div style={{ fontWeight: 800, fontSize: 16, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{play.name}</div>
           {origin === "shared" && <div style={{ fontSize: 11.5, color: C_UI.warn }}>Geteilter Spielzug</div>}
         </div>
-        <Segmented label="Ansicht" value={mode} onChange={(m) => { setMode(m); setTool(null); }}
+        <Segmented label="Ansicht" value={mode} onChange={(m) => { if (m === "player") setAnswered({}); setMode(m); setTool(null); }}
           options={[
             { value: "coach", label: "Trainer" },
             { value: "player", label: "Spielerin" },
@@ -232,7 +238,7 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
       <div style={panelStyle(wide, C_UI.line, C_UI.panel, mode === "player" ? "52vh" : "46vh")}>
         {C && mode === "coach" && (
           <>
-            <VariantBar decisions={C.play.variant.decisions} choices={choices} onChoose={choose} />
+            <VariantBar decisions={C.play.variant.decisions} choices={choices} onChoose={chooseCoach} />
             {showAnalysis && <AnalysisPanel analysis={analysis} onChange={setAnalysis} />}
             {windows && showAnalysis && <PassWindowStrip C={C} windows={windows} time={time} onSeek={playback.seek} />}
             <PlayControls compiled={C} frame={frame} playback={playback}

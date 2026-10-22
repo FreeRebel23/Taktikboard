@@ -39,6 +39,9 @@ export function reachZones(C, players, team = "defense") {
 /**
  * Freiraumkarte: Rasterpunkte, an denen eine Mitspielerin anspielbar wäre
  * (freie Linie vom Ball, keine Verteidigerin auf der Passseite in 1 m, Pass ≤ 10 m).
+ * kind "open":  direkter Pass möglich
+ * kind "hands": nur über/unter den Händen der Verteidigerinnen an der Passgeberin
+ *               (Lob oder Bodenpass), dahinter frei
  * score ∈ (0,1]: je größer der Abstand zu Händen und Gegenspielerinnen, desto höher.
  */
 export function freeSpace(C, players, holder, step = 6) {
@@ -51,7 +54,7 @@ export function freeSpace(C, players, holder, step = 6) {
       const P = { x, y };
       const L = dist(hp, P);
       if (L < 14 || L > LANE_MAX_LENGTH) continue;
-      let lane = Infinity, mark = Infinity, ok = true;
+      let lane = Infinity, mark = Infinity, ok = true, hands = false;
       for (const o of opp) {
         const dP = dist(o, P);
         const toPasser = { x: hp.x - P.x, y: hp.y - P.y };
@@ -60,12 +63,13 @@ export function freeSpace(C, players, holder, step = 6) {
         if (cos > -0.17) mark = Math.min(mark, dP);
         const near = dist(o, hp) <= LANE_NEAR_RADIUS;
         const ds = distToSegment(o, hp, P);
-        if (near ? ds < LANE_REACH : ds <= 8) { ok = false; break; }
+        if (near && ds < LANE_REACH) { hands = true; continue; }
+        if (!near && ds <= 8) { ok = false; break; }
         if (!near) lane = Math.min(lane, ds);
       }
       if (!ok) continue;
       const score = Math.max(0.05, Math.min(1, (lane - 8) / 14, (mark - 10) / 16));
-      out.push({ x, y, score });
+      out.push({ x, y, score, kind: hands ? "hands" : "open" });
     }
   }
   return out;

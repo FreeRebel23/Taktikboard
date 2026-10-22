@@ -4,12 +4,16 @@ const ease = (u) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
 const same = (a, b) => a && b && ["x", "y", "w", "h"].every((k) => Math.abs(a[k] - b[k]) < 0.01);
 
 /* Animiert einen Rechteck-Ausschnitt (viewBox) weich zum Ziel. */
-export default function useAnimatedBox(target, ms = 650) {
+/** instantKey: ändert er sich (z. B. anderes Feld, andere Orientierung), springt der
+ *  Ausschnitt sofort – animiert werden nur Kamerafahrten innerhalb desselben Feldes. */
+export default function useAnimatedBox(target, ms = 650, instantKey = "") {
   const [box, setBox] = useState(target);
   const cur = useRef(target);
+  const key = useRef(instantKey);
   useEffect(() => {
     if (!target || same(cur.current, target)) return;
     const reduce = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (key.current !== instantKey) { key.current = instantKey; cur.current = target; setBox(target); return; }
     const from = cur.current ?? target;
     if (reduce || !from) { cur.current = target; setBox(target); return; }
     let raf;
@@ -24,6 +28,8 @@ export default function useAnimatedBox(target, ms = 650) {
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [target?.x, target?.y, target?.w, target?.h]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [target?.x, target?.y, target?.w, target?.h, instantKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Beim Sprung schon im selben Render den neuen Ausschnitt liefern (Pointer-Mapping stimmt sofort)
+  if (key.current !== instantKey) return target;
   return box ?? target;
 }

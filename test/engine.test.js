@@ -147,3 +147,30 @@ test("Bodenpass und Lob kommen an Händen vorbei, direkter Pass nicht", () => {
   assert.deepEqual(pass("bounce").warnings, []);
   assert.deepEqual(pass("lob").warnings, []);
 });
+
+import { freeSpace, corridors, passWindows } from "../src/play/analysis.js";
+
+test("Freiraumkarte: Raum hinter einer Verteidigerin an der Passgeberin ist 'nur per Lob/Boden', nie 'direkt'", () => {
+  const C = laneSetup({ x: 75, y: 92 });
+  const f = sampleFrame(C, 0.5);
+  const cells = freeSpace(C, f.players, "o1");
+  const ahead = cells.filter((c) => Math.abs(c.x - 75) < 3 && c.y < 70);
+  assert.ok(ahead.length > 0);
+  assert.ok(ahead.every((c) => c.kind === "hands"));
+  assert.ok(cells.some((c) => c.kind === "open"), "seitlich bleibt direkt anspielbar");
+});
+
+test("Passkorridor: Breite schrumpft, wenn eine Verteidigerin näher an die Linie rückt", () => {
+  const wide = laneSetup({ x: 140, y: 140 }, { d2: { x: 100, y: 70 } });
+  const narrow = laneSetup({ x: 140, y: 140 }, { d2: { x: 88, y: 70 } });
+  const w = (C) => corridors(C, sampleFrame(C, 0.5).players, "o1").find((l) => l.to === "o2").halfWidth;
+  assert.ok(w(wide) > w(narrow));
+});
+
+test("Passfenster: Abschnitte decken die Haltephasen lückenlos und ohne Überlappung ab", () => {
+  const C = laneSetup({ x: 75, y: 92 });
+  const { rows } = passWindows(C, 0.1);
+  const segs = rows.o2;
+  assert.ok(segs.length >= 1);
+  for (let i = 1; i < segs.length; i++) assert.ok(segs[i].t0 >= segs[i - 1].t1 - 1e-9);
+});

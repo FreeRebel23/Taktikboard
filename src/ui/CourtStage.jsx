@@ -31,15 +31,17 @@ const CourtStage = forwardRef(function CourtStage(
   }, []);
 
   const aspect = size.w / size.h;
-  // Ganzfeld quer auf breiten Flächen (Tablet quer, Desktop)
-  const landscape = allowLandscape && courtType === "full" && aspect > 1.15;
+  // Ganzfeld quer, wenn das Feld dadurch größer dargestellt wird (Tablet quer, Desktop)
+  const portraitVB = viewBoxFor(courtType, false), landscapeVB = viewBoxFor(courtType, true);
+  const scaleOf = (vb) => Math.min(size.w / vb.w, size.h / vb.h);
+  const landscape = allowLandscape && courtType === "full" && scaleOf(landscapeVB) > scaleOf(portraitVB) * 1.05;
   const view = landscape ? LANDSCAPE : PORTRAIT;
   const full = viewBoxFor(courtType, landscape);
   const target = useMemo(
     () => (camera ? boxToViewBox(camera, { landscape, aspect, full }) : full),
     [camera?.x0, camera?.y0, camera?.x1, camera?.y1, landscape, aspect, courtType], // eslint-disable-line react-hooks/exhaustive-deps
   );
-  const VB = useAnimatedBox(target);
+  const VB = useAnimatedBox(target, 650, `${courtType}|${landscape}`);
   // Beim Hineinzoomen Figuren relativ zum Feld verkleinern (realistischere Abstände,
   // weniger Überlappung); in der Gesamtansicht bleiben sie zur Lesbarkeit groß.
   const figScale = Math.max(0.72, Math.min(1, Math.sqrt(Math.min(VB.w / full.w, VB.h / full.h) * 1.15)));

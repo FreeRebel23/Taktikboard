@@ -44,7 +44,8 @@ export default function AnalysisLayers({ frame, analysis }) {
   return (
     <g pointerEvents="none">
       {space.map((p, i) => (
-        <rect key={i} x={p.x - 2.6} y={p.y - 2.6} width="5.2" height="5.2" rx="1.6" fill={OPEN_COLOR} opacity={0.08 + 0.32 * p.score} />
+        <rect key={i} x={p.x - 2.6} y={p.y - 2.6} width="5.2" height="5.2" rx="1.6" fill={p.kind === "hands" ? "#FFD166" : OPEN_COLOR}
+          opacity={(p.kind === "hands" ? 0.06 : 0.08) + (p.kind === "hands" ? 0.22 : 0.32) * p.score} />
       ))}
       {zones.map((z) => (
         <circle key={z.id} cx={z.x} cy={z.y} r={z.r} fill="#5B8BB2" fillOpacity="0.12" stroke="#A9C8E2" strokeWidth="0.5" strokeDasharray="1.2 1.2" opacity="0.9" />

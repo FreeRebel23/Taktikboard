@@ -56,7 +56,10 @@ export function AnalysisPanel({ analysis, onChange }) {
           );
         })}
       </div>
-      <div style={{ fontSize: 11.5, color: C_UI.dim, lineHeight: 1.35 }}>{MODEL_NOTE}</div>
+      <div style={{ fontSize: 11.5, color: C_UI.dim, lineHeight: 1.35 }}>
+        {analysis.space && <span><span style={{ color: C_UI.open }}>■</span> direkt anspielbar · <span style={{ color: C_UI.warn }}>■</span> nur per Lob/Bodenpass · </span>}
+        {MODEL_NOTE}
+      </div>
     </div>
   );
 }

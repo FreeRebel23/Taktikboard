@@ -69,7 +69,7 @@ export default function PlayControls({ compiled, frame, playback, showPaths, onT
       </div>
 
       {/* Transport */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
         <Btn onClick={() => playback.seek(0)} title="Zum Anfang" style={NAV}>⏮</Btn>
         <Btn onClick={prev} title="Beat zurück" style={NAV}>◀</Btn>
         <Btn active onClick={playback.toggle} title={playing ? "Pause" : "Abspielen"} style={{ minWidth: 104 }}>
