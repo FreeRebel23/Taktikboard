@@ -58,3 +58,39 @@ export function IconButton({ onClick, title, children, active, style, disabled }
     }}>{children}</button>
   );
 }
+
+/** Dialog in der App (statt window.confirm – funktioniert überall, auch eingebettet) */
+export function Dialog({ title, children, actions, onClose }) {
+  return (
+    <div role="dialog" aria-modal="true" aria-label={title} onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(0,0,0,0.6)", display: "grid", placeItems: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: "min(440px, 100%)", background: C_UI.panel, border: `1px solid ${C_UI.border}`, borderRadius: 14,
+        padding: 16, display: "grid", gap: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
+      }}>
+        <div style={{ fontWeight: 800, fontSize: 17 }}>{title}</div>
+        {children && <div style={{ fontSize: 14, lineHeight: 1.45, color: C_UI.muted }}>{children}</div>}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {actions.map((a) => (
+            <button key={a.label} onClick={a.onClick} autoFocus={a.primary} style={{
+              padding: "10px 14px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
+              border: `1px solid ${a.danger ? C_UI.trap : a.primary ? C_UI.accent : C_UI.border}`,
+              background: a.primary ? C_UI.accent : a.danger ? "rgba(224,70,58,0.14)" : "#232B32",
+              color: a.primary ? "#16110C" : a.danger ? "#FFB4A8" : C_UI.text,
+            }}>{a.label}</button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Datei im Browser speichern (Fallback, wenn der Gerätespeicher versagt) */
+export function downloadJson(obj, filename) {
+  const blob = new Blob([JSON.stringify(obj, null, 1)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+}

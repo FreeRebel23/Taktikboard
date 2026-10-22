@@ -21,11 +21,15 @@ import { VariantBar, AnalysisPanel, PassWindowStrip } from "./CoachParts.jsx";
 import Builder from "./Builder.jsx";
 import ShareSheet from "./ShareSheet.jsx";
 import useWide, { panelStyle } from "../hooks/useWide.js";
+import { Dialog } from "./studioUi.jsx";
+import { findMyPlay, newPlayId } from "../store/playStore.js";
 
 const EPS = 0.02;
 const FOOT = { screen: "wide", defense: "wide", deny: "wide", triple: "stagger", protect: "stagger", open: "stagger" };
 
 export default function PlayStudio({ play: initialPlay, origin, onClose, onSave, initialMode = "coach", initialMe = null }) {
+  const [keepMsg, setKeepMsg] = useState(null);   // Ergebnis "In meine Spielzüge"
+  const [keepDialog, setKeepDialog] = useState(null);
   const [play, setPlay] = useState(initialPlay);
   const [mode, setMode] = useState(initialMode);
   const [choices, setChoices] = useState({});
@@ -168,8 +172,8 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
   if (mode === "edit") {
     return (
       <Builder play={play} origin={origin}
-        onDone={(edited, saved) => { if (edited) { setPlay(edited); setChoices({}); } if (saved) onSave?.(saved); setMode("coach"); }}
-        onSave={(p) => { setPlay(p); onSave?.(p); }} />
+        onDone={(p, { close } = {}) => { if (close) { onClose(); return; } if (p) { setPlay(p); setChoices({}); } setMode("coach"); }}
+        onSave={(p) => { const r = onSave?.(p) ?? { ok: false, error: "Speichern ist hier nicht verfügbar." }; if (r.ok) setPlay(p); return r; }} />
     );
   }
 
@@ -195,9 +199,33 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
             { value: "player", label: "Spielerin" },
             { value: "edit", label: "Bearbeiten" },
           ]} />
+        {origin === "shared" && (
+          <IconButton onClick={() => {
+            const doSave = (p) => { const r = onSave?.(p); setKeepMsg(r?.ok ? { ok: true, text: "In deinen Spielzügen gespeichert" } : { ok: false, text: r?.error ?? "Speichern fehlgeschlagen" }); };
+            const existing = findMyPlay(play.id);
+            if (existing && JSON.stringify(existing.play) !== JSON.stringify(play)) {
+              setKeepDialog({
+                title: "Diesen Spielzug hast du schon",
+                text: `Du hast eine ältere Fassung von „${existing.play.name}“ gespeichert. Mit dem geteilten Stand aktualisieren oder als Kopie behalten?`,
+                actions: [
+                  { label: "Abbrechen", onClick: () => setKeepDialog(null) },
+                  { label: "Als Kopie", onClick: () => { setKeepDialog(null); doSave({ ...play, id: newPlayId(), name: `${play.name} (neu)` }); } },
+                  { label: "Aktualisieren", primary: true, onClick: () => { setKeepDialog(null); doSave(play); } },
+                ],
+              });
+            } else doSave(play);
+          }} title="In meine Spielzüge übernehmen">In meine Spielzüge</IconButton>
+        )}
         <IconButton onClick={() => setSharing(true)} title="Teilen">Teilen</IconButton>
       </div>
 
+      {keepMsg && (
+        <div role={keepMsg.ok ? "status" : "alert"} style={{ margin: "0 12px 6px", padding: "8px 10px", borderRadius: 10, fontSize: 13.5,
+          background: keepMsg.ok ? "rgba(95,211,141,0.12)" : "#3A1D1A", color: keepMsg.ok ? "#CFF5DE" : "#FFD9D3" }}>
+          {keepMsg.ok ? "✓ " : "Nicht gespeichert: "}{keepMsg.text}
+        </div>
+      )}
+      {keepDialog && <Dialog title={keepDialog.title} onClose={() => setKeepDialog(null)} actions={keepDialog.actions}>{keepDialog.text}</Dialog>}
       {compiled.error && (
         <div role="alert" style={{ margin: "0 12px 6px", padding: 10, borderRadius: 10, background: "#3A1D1A", color: "#FFD9D3", fontSize: 13, whiteSpace: "pre-wrap" }}>
           Dieser Spielzug ist fehlerhaft und kann nicht abgespielt werden:{"\n"}{compiled.error}

@@ -79,7 +79,7 @@ test("Zielart je Aktion", () => {
 test("Fehler werden verständlich gemeldet statt abzustürzen (Pass ohne Ball)", () => {
   const p = addAction(fresh(), {}, 0, { type: "pass", from: "o3", to: "o2" });
   const { errors } = validatePlayTree(p);
-  assert.ok(errors.some((e) => e.includes("Ball ist bei")));
+  assert.ok(errors.some((e) => e.includes("Ball ist zu diesem Zeitpunkt bei")));
 });
 
 test("Löschen einer Aktion", () => {

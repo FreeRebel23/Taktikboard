@@ -191,3 +191,44 @@ export function targetKind(type) {
   if (type === "hold") return "none";
   return ACTIONS[type]?.kind === "relation" ? "opponent" : "point";
 }
+
+/** Beat innerhalb seines Segments nach vorne (-1) oder hinten (+1) verschieben.
+ *  Gibt { play, index } mit neuer flacher Position zurück. */
+export function moveBeat(play, choices, index, dir) {
+  const next = clone(play);
+  const f = flatBeats(next, choices)[index];
+  if (!f) return { play, index };
+  const node = segments(next, choices)[f.si].node;
+  const j2 = f.j + dir;
+  if (j2 < 0 || j2 >= node.beats.length) return { play, index };
+  [node.beats[f.j], node.beats[j2]] = [node.beats[j2], node.beats[f.j]];
+  return { play: next, index: index + dir };
+}
+
+/** Umweg in der Mitte zwischen Start und Ziel einer Laufaktion einfügen */
+export function addVia(play, choices, index, k, from) {
+  return updateBeat(play, choices, index, (beat) => {
+    const a = beat.actions[k];
+    const pts = [from, ...(a.via ?? []), a.to];
+    const p = pts[pts.length - 2], q = pts[pts.length - 1];
+    // seitlich versetzt, damit ein sichtbarer Bogen entsteht
+    const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;
+    const L = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+    const off = Math.min(14, L * 0.25);
+    a.via = [...(a.via ?? []), { x: Math.round((mx - ((q.y - p.y) / L) * off) * 10) / 10, y: Math.round((my + ((q.x - p.x) / L) * off) * 10) / 10 }];
+  });
+}
+
+export function clearVia(play, choices, index, k) {
+  return updateBeat(play, choices, index, (beat) => { delete beat.actions[k].via; });
+}
+
+/** Ziel- oder Umwegpunkt einer Aktion setzen (which: "to" | Index des Umwegs) */
+export function setPoint(play, choices, index, k, which, p) {
+  return updateBeat(play, choices, index, (beat) => {
+    const a = beat.actions[k];
+    const q = { x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 };
+    if (which === "to") a.to = q;
+    else a.via = a.via.map((v, i) => (i === which ? q : v));
+  });
+}

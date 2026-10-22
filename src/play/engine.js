@@ -421,8 +421,9 @@ function checkPasses(C) {
       const lane = passLanes(C, f.players, p.from).find((l) => l.to === p.to);
       if (!lane) continue;
       const where = `Beat ${b.index + 1} (${b.beat.title ?? b.beat.id})`;
-      if (lane.status === "hands" && !beatsHands(passKind(p))) out.push(`${where}: Pass ${p.from}→${p.to} geht direkt durch die Arme von ${lane.blockedBy.join(", ")} – nur als Lob oder Bodenpass möglich`);
-      if (lane.status === "closed") out.push(`${where}: Pass ${p.from}→${p.to} durch eine geschlossene Passlinie`);
+      const L = (id) => C.entity[id]?.label ?? id;
+      if (lane.status === "hands" && !beatsHands(passKind(p))) out.push(`${where}: Pass ${L(p.from)}→${L(p.to)} geht direkt durch die Arme von ${lane.blockedBy.map(L).join(", ")} – nur als Lob oder Bodenpass möglich`);
+      if (lane.status === "closed") out.push(`${where}: Pass ${L(p.from)}→${L(p.to)} durch eine geschlossene Passlinie (Empfängerin gedeckt oder Verteidigerin in der Linie)`);
     }
   }
   return out;

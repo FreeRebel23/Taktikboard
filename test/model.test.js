@@ -26,7 +26,7 @@ test("überlappende Aktionen derselben Spielerin sind Fehler, sequenzielle nicht
     { type: "move", player: "o2", to: { x: 100, y: 50 }, end: 0.6 },
     { type: "sprint", player: "o2", to: { x: 60, y: 30 }, start: 0.5 },
   ] }]));
-  assert.ok(overlap.errors.some((e) => e.includes("überlappende")));
+  assert.ok(overlap.errors.some((e) => e.includes("zwei Aktionen gleichzeitig")));
   const seq = validatePlay(tiny([{ duration: 1000, actions: [
     { type: "move", player: "o2", to: { x: 100, y: 50 }, end: 0.5 },
     { type: "sprint", player: "o2", to: { x: 60, y: 30 }, start: 0.5 },
@@ -36,7 +36,7 @@ test("überlappende Aktionen derselben Spielerin sind Fehler, sequenzielle nicht
 
 test("Pass nur vom aktuellen Ballbesitz", () => {
   const { errors } = validatePlay(tiny([{ duration: 1000, actions: [{ type: "pass", from: "o2", to: "o1" }] }]));
-  assert.ok(errors.some((e) => e.includes("Ball ist bei")));
+  assert.ok(errors.some((e) => e.includes("Ball ist zu diesem Zeitpunkt bei")));
 });
 
 test("Dribbling ohne Ball ist Fehler – nach Ballannahme im selben Beat erlaubt", () => {
@@ -54,9 +54,9 @@ test("Trap braucht zwei Defense-Spielerinnen und ein Offense-Ziel", () => {
     { type: "trap", players: ["d1"], target: "o1" },
     { type: "deny", player: "o2", target: "d2" },
   ] }]));
-  assert.ok(errors.some((e) => e.includes("genau zwei")));
-  assert.ok(errors.some((e) => e.includes("muss Offense")));
-  assert.ok(errors.some((e) => e.includes("nur für Defense")));
+  assert.ok(errors.some((e) => e.includes("genau zwei Verteidigerinnen")));
+  assert.ok(errors.some((e) => e.includes("muss eine Angreiferin sein")));
+  assert.ok(errors.some((e) => e.includes("können nur Verteidigerinnen")));
 });
 
 test("geplante Aktionen erzeugen eine Warnung, keinen Fehler", () => {

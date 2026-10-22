@@ -1,487 +1,177 @@
-import { useState, useRef, useEffect } from "react";
-import { OFF_COLOR, DEF_COLOR, BALL_COLOR, REC_COLOR, CHALK, OPEN_COLOR, OFF, DEF, courtHeight } from "./court/constants.js";
-import { PRESETS, DEFAULT_HALF, DEFAULT_FULL, interpKF } from "./legacy/presets.js";
-import { FRAME_MS, clone, loadSeqs, persistSeqs } from "./legacy/recordingStore.js";
-import Btn from "./ui/Btn.jsx";
-import CourtStage from "./ui/CourtStage.jsx";
-import Player25D from "./render/Player25D.jsx";
-import Ball25D from "./render/Ball25D.jsx";
-import { boardPlayers } from "./render/boardView.js";
-import { PLAYS, validatePlayTree } from "./play/index.js";
-import PlayStudio from "./studio/PlayStudio.jsx";
-import { loadMyPlays, saveMyPlay, deleteMyPlay, newPlayId } from "./store/playStore.js";
-import { playFromHash, looksLikePlay } from "./store/share.js";
-import { newPlayFrom } from "./studio/builderModel.js";
-
 /* ============================================================
-   TAKTIKBOARD – Basketball Coach Board
-   Bibliothek · Freimodus (Drag, Zeichnen, REC) · Play-Studio
-   Koordinaten: siehe court/constants.js
+   TAKTIKBOARD – App-Hülle
+   Startbildschirm "Spielzüge" · Freies Board · Play-Studio
    ============================================================ */
 
-const SNAP_PX = 60;                          // Snap-Radius in Bildschirm-Pixeln
-const BALL_OFFSET = { x: 6.5, y: -6.5 };     // Ball sitzt an der Schulter des Trägers
+import { useEffect, useRef, useState } from "react";
+import Home from "./home/Home.jsx";
+import NewPlaySheet from "./home/NewPlaySheet.jsx";
+import FreeBoard from "./board/FreeBoard.jsx";
+import PlayStudio from "./studio/PlayStudio.jsx";
+import ShareSheet from "./studio/ShareSheet.jsx";
+import { Dialog, downloadJson } from "./studio/studioUi.jsx";
+import { PLAYS, validatePlayTree } from "./play/index.js";
+import {
+  loadMyPlays, saveMyPlay, deleteMyPlay, newPlayId, importPlays, pendingDrafts, clearDraft, backupObject, findMyPlay,
+} from "./store/playStore.js";
+import { playFromHash, looksLikePlay, fileNameFor } from "./store/share.js";
+import { newPlayFrom } from "./studio/builderModel.js";
+
+const isBuiltin = (id) => PLAYS.some((p) => p.id === id);
 
 export default function Taktikboard() {
-  const [courtType, setCourtType] = useState("half");
-  const [positions, setPositions] = useState(DEFAULT_HALF);
-  const [showDef, setShowDef] = useState(true);
-  const [mode, setMode] = useState("move"); // move | pen | arrow
-  const [drawings, setDrawings] = useState([]);
-  const [preset, setPreset] = useState(null);
-  const [progress, setProgress] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [showPaths, setShowPaths] = useState(true);
-  const [ballOwnerId, setBallOwnerId] = useState(null);
-  const [recording, setRecording] = useState(false);
-  const [hasRecording, setHasRecording] = useState(false);
-  const [replaying, setReplaying] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveName, setSaveName] = useState("");
-  const [sequences, setSequences] = useState(loadSeqs);
-  const [activeSeqId, setActiveSeqId] = useState(null);
-  // Aktionsbasierte Plays
+  const [screen, setScreen] = useState("home");          // home | board
   const [myPlays, setMyPlays] = useState(loadMyPlays);
-  const [open, setOpen] = useState(null); // { play, origin: builtin|mine|shared, mode, me }
-  const [notice, setNotice] = useState("");
-
-  const stageRef = useRef(null);
-  const dragId = useRef(null);
-  const ballPosRef = useRef(null);
-  const stroke = useRef(null);
-  const rafRef = useRef(null);
-  const playRef = useRef(false);
-  const snapRef = useRef(null);
-  const bufferRef = useRef([]);
-  const replayTimer = useRef(null);
+  const [drafts, setDrafts] = useState(pendingDrafts);
+  const [open, setOpen] = useState(null);                // { play, origin, mode, me, session }
+  const [notice, setNotice] = useState(null);            // { text, error? }
+  const [newSheet, setNewSheet] = useState(false);
+  const [sharePlay, setSharePlay] = useState(null);
+  const [confirm, setConfirm] = useState(null);
   const fileRef = useRef(null);
+
+  const refresh = () => { setMyPlays(loadMyPlays()); setDrafts(pendingDrafts()); };
+
+  // Änderungen aus einem anderen Tab übernehmen
+  useEffect(() => {
+    const h = (e) => { if (e.key?.startsWith("taktikboard.")) refresh(); };
+    window.addEventListener("storage", h);
+    return () => window.removeEventListener("storage", h);
+  }, []);
 
   /* ----- Geteilter Spielzug im Link (#p=…) ----- */
   useEffect(() => {
     const hash = typeof location !== "undefined" ? location.hash : "";
     if (!/[#&]p=/.test(hash)) return;
     playFromHash(hash).then((play) => {
-      if (!looksLikePlay(play)) throw new Error("Kein gültiger Spielzug im Link.");
+      if (!looksLikePlay(play)) throw new Error("Der Link enthält keinen Spielzug.");
       const { errors } = validatePlayTree(play);
       if (errors.length) throw new Error(errors[0]);
-      setOpen({ play, origin: "shared", mode: /[#&]v=player/.test(hash) ? "player" : "coach" });
-    }).catch((e) => setNotice(`Link konnte nicht geöffnet werden: ${e.message}`));
+      setOpen({ play, origin: "shared", mode: /[#&]v=player/.test(hash) ? "player" : "coach", session: Date.now() });
+    }).catch((e) => setNotice({
+      error: true,
+      text: /entpacken|DecompressionStream/i.test(e.message)
+        ? "Dieser Browser ist zu alt, um den Link zu öffnen (benötigt z. B. Safari ab iOS 16.4). Bitte den Browser aktualisieren oder den Spielzug als Datei schicken lassen."
+        : `Der Link konnte nicht geöffnet werden: ${e.message}`,
+    }));
   }, []);
 
-  /* ----- Legacy-Animation ----- */
-  useEffect(() => {
-    playRef.current = playing;
-    if (!playing) { cancelAnimationFrame(rafRef.current); return; }
-    let last = performance.now();
-    const dur = 4500;
-    const step = (now) => {
-      const dt = now - last; last = now;
-      setProgress((p) => {
-        const np = Math.min(1, p + dt / dur);
-        if (np >= 1) setPlaying(false);
-        return np;
-      });
-      if (playRef.current) rafRef.current = requestAnimationFrame(step);
-    };
-    rafRef.current = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [playing]);
-
-  /* ----- Aufnahme & Replay (Legacy) ----- */
-  snapRef.current = { positions, ballOwnerId, drawings, showDef, courtType };
-
-  useEffect(() => {
-    if (!recording) return;
-    const tick = () => bufferRef.current.push(clone(snapRef.current));
-    tick();
-    const iv = setInterval(tick, FRAME_MS);
-    return () => clearInterval(iv);
-  }, [recording]);
-
-  const stopReplay = () => {
-    if (replayTimer.current) { clearTimeout(replayTimer.current); replayTimer.current = null; }
-    setReplaying(false);
-  };
-
-  const applyFrame = (f) => {
-    setCourtType(f.courtType);
-    setPositions(f.positions);
-    setBallOwnerId(f.ballOwnerId);
-    setDrawings(f.drawings);
-    setShowDef(f.showDef);
-  };
-
-  const playFrames = (frames) => {
-    if (!frames || !frames.length) return;
-    stopReplay();
-    setPreset(null); setProgress(0); setPlaying(false);
-    setReplaying(true);
-    let i = 0;
-    const step = () => {
-      if (i >= frames.length) { replayTimer.current = null; setReplaying(false); return; }
-      applyFrame(frames[i]); i += 1;
-      replayTimer.current = setTimeout(step, FRAME_MS);
-    };
-    step();
-  };
-
-  const startRec = () => {
-    stopReplay();
-    setPlaying(false);
-    bufferRef.current = [];
-    setHasRecording(false);
-    setSaving(false); setSaveName("");
-    setActiveSeqId(null);
-    setRecording(true);
-  };
-  const stopRec = () => { setRecording(false); setHasRecording(bufferRef.current.length > 0); };
-
-  const saveRecording = () => {
-    if (!bufferRef.current.length) return;
-    const name = saveName.trim() || `Sequenz ${sequences.length + 1}`;
-    const seq = { id: "seq_" + Date.now(), name, frames: clone(bufferRef.current) };
-    const next = [...sequences, seq];
-    setSequences(next); persistSeqs(next);
-    setSaving(false); setSaveName("");
-  };
-
-  const playSequence = (seq) => {
-    if (recording) stopRec();
-    setActiveSeqId(seq.id);
-    stageRef.current?.resetZoom();
-    playFrames(seq.frames);
-  };
-
-  const deleteSequence = (id) => {
-    const next = sequences.filter((s) => s.id !== id);
-    setSequences(next); persistSeqs(next);
-    if (activeSeqId === id) setActiveSeqId(null);
-  };
-
-  /* ----- Anzeigeposition (Legacy-Animation überlagert State) ----- */
-  const displayPos = (id) => {
-    if (preset?.anim?.[id] && progress > 0) return interpKF(preset.anim[id], progress);
-    if (id === "ball" && ballOwnerId && positions[ballOwnerId]) {
-      const o = displayPos(ballOwnerId);
-      return { x: o.x + BALL_OFFSET.x, y: o.y + BALL_OFFSET.y };
-    }
-    return positions[id];
-  };
-
-  /* ----- Pointer (Freimodus) ----- */
-  const onTokenDown = (e, id) => {
-    if (mode !== "move" || replaying) return;
-    if (progress > 0) { setProgress(0); setPlaying(false); }
-    if (id === "ball" && ballOwnerId) {
-      const start = displayPos("ball");
-      setPositions((pos) => ({ ...pos, ball: { ...start } }));
-      setBallOwnerId(null);
-      ballPosRef.current = start;
-    } else if (id === "ball") {
-      ballPosRef.current = positions.ball;
-    }
-    dragId.current = id;
-    try { stageRef.current.svg.setPointerCapture(e.pointerId); } catch {}
-  };
-
-  const onCourtDown = (e, p, svg) => {
-    if (mode === "move" || replaying) return;
-    stroke.current = mode === "pen" ? { type: "pen", points: [p] } : { type: "arrow", x1: p.x, y1: p.y, x2: p.x, y2: p.y };
-    setDrawings((d) => [...d, stroke.current]);
-    try { svg.setPointerCapture(e.pointerId); } catch {}
-  };
-
-  const onCourtMove = (e, p) => {
-    if (replaying) return;
-    if (dragId.current) {
-      const id = dragId.current;
-      const maxY = courtHeight(courtType);
-      const np = { x: Math.max(0, Math.min(150, p.x)), y: Math.max(0, Math.min(maxY, p.y)) };
-      if (id === "ball") ballPosRef.current = np;
-      setPositions((pos) => ({ ...pos, [id]: np }));
-    } else if (stroke.current) {
-      if (stroke.current.type === "pen") stroke.current.points.push(p);
-      else { stroke.current.x2 = p.x; stroke.current.y2 = p.y; }
-      setDrawings((d) => [...d.slice(0, -1), { ...stroke.current }]);
-    }
-  };
-
-  const onCourtUp = () => {
-    if (dragId.current === "ball" && ballPosRef.current) snapBall(ballPosRef.current);
-    dragId.current = null; stroke.current = null;
-  };
-
-  // Snap: Ball innerhalb SNAP_PX eines sichtbaren Spielers → Ballbesitz
-  const snapBall = (ballPos) => {
-    const thr = SNAP_PX / (stageRef.current?.pxPerUnit() ?? 1);
-    const ids = showDef ? [...OFF, ...DEF] : OFF;
-    let best = null, bestD = thr;
-    for (const pid of ids) {
-      const p = positions[pid];
-      const d = Math.hypot(p.x - ballPos.x, p.y - ballPos.y);
-      if (d <= bestD) { bestD = d; best = pid; }
-    }
-    setBallOwnerId(best);
-  };
-
-  /* ----- Aktionen ----- */
-  const openPlay = (play, origin, opts = {}) => {
-    if (recording) stopRec();
-    stopReplay(); setActiveSeqId(null); setPlaying(false);
-    setOpen({ play, origin, mode: opts.mode ?? "coach", me: opts.me ?? null });
-  };
-
+  const openPlay = (play, origin, mode = "coach", me = null) => setOpen({ play, origin, mode, me, session: Date.now() });
   const closePlay = () => {
     setOpen(null);
+    refresh();
     if (typeof location !== "undefined" && location.hash) history.replaceState(null, "", location.pathname + location.search);
   };
 
-  const persistPlay = (play) => { setMyPlays(saveMyPlay(play)); setOpen((o) => (o ? { ...o, play, origin: "mine" } : o)); };
+  /** Speichern mit Bestätigung – Ergebnis geht an den Aufrufer (Builder/Studio) */
+  const persistPlay = (play) => {
+    const res = saveMyPlay(play);
+    if (res.ok) {
+      setMyPlays(res.items);
+      setDrafts(pendingDrafts());
+      setOpen((o) => (o ? { ...o, play, origin: "mine" } : o));
+    }
+    return res;
+  };
 
-  const newPlay = () => {
-    const play = newPlayFrom({ id: newPlayId(), court: courtType, positions, ball: ballOwnerId });
-    openPlay(play, "mine", { mode: "edit" });
+  const createPlay = ({ name, court, positions, ball }) => {
+    const play = { ...newPlayFrom({ id: newPlayId(), court, positions, ball }), name: name || "Neuer Spielzug" };
+    setNewSheet(false);
+    openPlay(play, "new", "edit");
   };
 
   const importFile = async (file) => {
     try {
-      const play = JSON.parse(await file.text());
-      if (!looksLikePlay(play)) throw new Error("Datei enthält keinen Spielzug.");
-      const { errors } = validatePlayTree(play);
-      if (errors.length) throw new Error(errors[0]);
-      const imported = { ...play, id: newPlayId() };
-      setMyPlays(saveMyPlay(imported));
-      setNotice(`„${imported.name}“ importiert.`);
-    } catch (e) { setNotice(`Import fehlgeschlagen: ${e.message}`); }
-  };
-
-  const applyPreset = (p) => {
-    const base = p.court === "half" ? DEFAULT_HALF : DEFAULT_FULL;
-    setCourtType(p.court);
-    setPositions({ ...base, ...p.pos });
-    setShowDef(p.showDef);
-    setPreset(p);
-    setProgress(0);
-    setPlaying(false);
-    setDrawings([]);
-    stageRef.current?.resetZoom();
-    setBallOwnerId(null);
-    stopReplay(); setActiveSeqId(null);
-  };
-
-  const switchCourt = (t) => {
-    if (t === courtType) return;
-    setCourtType(t);
-    setPositions(t === "half" ? DEFAULT_HALF : DEFAULT_FULL);
-    setPreset(null); setProgress(0); setPlaying(false); setDrawings([]);
-    stageRef.current?.resetZoom();
-    setBallOwnerId(null);
-    stopReplay(); setActiveSeqId(null);
-  };
-
-  const resetBoard = () => {
-    setPositions(courtType === "half" ? DEFAULT_HALF : DEFAULT_FULL);
-    setPreset(null); setProgress(0); setPlaying(false); setDrawings([]);
-    stageRef.current?.resetZoom();
-    setBallOwnerId(null);
-    stopReplay(); setActiveSeqId(null);
-  };
-
-  const toggleDef = () => {
-    setShowDef((s) => {
-      if (s && ballOwnerId?.startsWith("d")) {
-        const here = displayPos("ball");
-        setPositions((pos) => ({ ...pos, ball: { ...here } }));
-        setBallOwnerId(null);
+      const data = JSON.parse(await file.text());
+      const list = data?.format === "taktikboard-backup" ? data.plays : [data];
+      const valid = [], broken = [];
+      for (const p of list ?? []) {
+        if (!looksLikePlay(p)) { broken.push("unbekannte Daten"); continue; }
+        const { errors } = validatePlayTree(p);
+        (errors.length ? broken : valid).push(errors.length ? p.name : p);
       }
-      return !s;
-    });
+      if (!valid.length) throw new Error(broken.length ? "Die Datei enthält keinen abspielbaren Spielzug." : "Die Datei enthält keinen Spielzug.");
+      // eingebaute Beispiele nicht als "eigene" importieren
+      const res = importPlays(valid.map((p) => (isBuiltin(p.id) ? { ...p, id: newPlayId() } : p)), newPlayId);
+      if (!res.ok) throw new Error(res.error);
+      refresh();
+      setNotice({ text: `${res.added} Spielzug${res.added === 1 ? "" : "e"} importiert${res.skipped ? `, ${res.skipped} bereits vorhanden` : ""}${broken.length ? `, ${broken.length} fehlerhaft übersprungen` : ""}.` });
+    } catch (e) {
+      setNotice({ error: true, text: `Import fehlgeschlagen: ${e.message}` });
+    }
   };
 
-  const togglePlay = () => {
-    if (!preset?.anim) return;
-    if (progress >= 1) { setProgress(0); setPlaying(true); }
-    else setPlaying((p) => !p);
+  const backup = () => {
+    const obj = backupObject();
+    downloadJson(obj, `taktikboard-sicherung-${new Date().toISOString().slice(0, 10)}.json`);
+    setNotice({ text: `Sicherung mit ${obj.plays.length} Spielzügen heruntergeladen. Bewahre die Datei gut auf (z. B. in der Cloud).` });
   };
 
-  const entityColor = (id) => (id === "ball" ? BALL_COLOR : id.startsWith("d") ? DEF_COLOR : OFF_COLOR);
+  const duplicate = (play) => {
+    const res = saveMyPlay({ ...structuredClone(play), id: newPlayId(), name: `${play.name} (Kopie)` });
+    if (res.ok) { setMyPlays(res.items); setNotice({ text: `„${play.name}“ dupliziert.` }); }
+    else setNotice({ error: true, text: res.error });
+  };
+
+  const askDelete = (play) => setConfirm({
+    title: `„${play.name}“ löschen?`,
+    text: "Der Spielzug wird von diesem Gerät gelöscht. Tipp: Vorher als Datei speichern, falls du ihn noch brauchst.",
+    actions: [
+      { label: "Abbrechen", onClick: () => setConfirm(null) },
+      { label: "Als Datei speichern", onClick: () => downloadJson(play, fileNameFor(play)) },
+      { label: "Löschen", danger: true, onClick: () => {
+        const res = deleteMyPlay(play.id);
+        setConfirm(null);
+        if (res.ok) { setMyPlays(res.items); clearDraft(play.id); setDrafts(pendingDrafts()); setNotice({ text: `„${play.name}“ gelöscht.` }); }
+        else setNotice({ error: true, text: res.error });
+      } },
+    ],
+  });
 
   /* ===== Play-Studio ===== */
   if (open) {
     return (
-      <PlayStudio key={open.play.id + open.origin} play={open.play} origin={open.origin}
-        initialMode={open.mode} initialMe={open.me} onClose={closePlay} onSave={persistPlay} />
+      <PlayStudio key={open.session} play={open.play} origin={open.origin}
+        initialMode={open.mode} initialMe={open.me} onClose={closePlay} onSave={persistPlay}
+        isSaved={!!findMyPlay(open.play.id)} />
     );
   }
 
-  /* ===== Bibliothek + Freimodus ===== */
+  /* ===== Freies Board ===== */
+  if (screen === "board") {
+    return <FreeBoard onHome={() => { setScreen("home"); refresh(); }}
+      onCreatePlay={({ court, positions, ball }) => createPlay({ name: "Neuer Spielzug", court, positions, ball })} />;
+  }
+
+  /* ===== Startbildschirm ===== */
   return (
-    <div style={{
-      position: "fixed", inset: 0, overflow: "hidden",
-      background: "#14181C", color: "#E8E4DA",
-      fontFamily: "'Archivo Narrow','Arial Narrow','Roboto Condensed',system-ui,sans-serif",
-      display: "flex", flexDirection: "column",
-    }}>
-      <div style={{
-        flexShrink: 0,
-        padding: "calc(8px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 6px calc(12px + env(safe-area-inset-left))",
-      }}>
-        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-            Taktik<span style={{ color: OFF_COLOR }}>board</span>
-          </h1>
-          <div style={{ display: "flex", gap: 6 }}>
-            <Btn active={courtType === "half"} onClick={() => switchCourt("half")}>Halbfeld</Btn>
-            <Btn active={courtType === "full"} onClick={() => switchCourt("full")}>Ganzfeld</Btn>
-          </div>
-        </header>
-
-        {/* Spielzüge: aktionsbasiert (★), eigene, Legacy, Aufnahmen */}
-        <div style={{ display: "flex", gap: 6, overflowX: "auto" }}>
-          {PLAYS.map((p) => (
-            <Btn key={p.id} onClick={() => openPlay(p, "builtin")} tone={OPEN_COLOR} title={`${p.name} öffnen`}>★ {p.name}</Btn>
-          ))}
-          {myPlays.map(({ play }) => (
-            <span key={play.id} style={{ display: "inline-flex", flexShrink: 0, gap: 2 }}>
-              <Btn onClick={() => openPlay(play, "mine")} tone={OPEN_COLOR} title={`${play.name} öffnen`}>◆ {play.name}</Btn>
-              <button onClick={() => setNotice({ confirmDelete: play })} title="Eigenen Spielzug löschen" aria-label={`${play.name} löschen`}
-                style={{ padding: "0 8px", borderRadius: 8, fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", border: "1px solid #39424B", background: "#232B32", color: "#8E9AA4" }}>✕</button>
-            </span>
-          ))}
-          <Btn onClick={newPlay} title="Neuen Spielzug aus der aktuellen Aufstellung erstellen">+ Neues Play</Btn>
-          <Btn onClick={() => fileRef.current?.click()} title="Spielzug-Datei importieren">Import</Btn>
-          <input ref={fileRef} type="file" accept=".json,application/json" hidden
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = ""; }} />
-          {PRESETS.map((p) => (
-            <Btn key={p.id} active={preset?.id === p.id} onClick={() => applyPreset(p)} tone={p.id === "zone23" ? DEF_COLOR : OFF_COLOR}>
-              {p.name}
-            </Btn>
-          ))}
-          {sequences.map((seq) => (
-            <span key={seq.id} style={{ display: "inline-flex", flexShrink: 0, alignItems: "stretch", gap: 2 }}>
-              <Btn active={activeSeqId === seq.id} tone={REC_COLOR} onClick={() => playSequence(seq)}>▶ {seq.name}</Btn>
-              <button onClick={() => { if (window.confirm(`Sequenz „${seq.name}“ löschen?`)) deleteSequence(seq.id); }}
-                title="Aufnahme löschen" aria-label={`Aufnahme ${seq.name} löschen`}
-                style={{ padding: "0 8px", borderRadius: 8, fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", border: "1px solid #39424B", background: "#232B32", color: "#8E9AA4" }}>✕</button>
-            </span>
-          ))}
-        </div>
-
-        {notice && (
-          <div role="status" style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, background: "#232B32", fontSize: 13, display: "flex", gap: 8, alignItems: "center" }}>
-            {typeof notice === "string" ? (
-              <><span style={{ flex: 1 }}>{notice}</span><Btn onClick={() => setNotice("")}>OK</Btn></>
-            ) : (
-              <>
-                <span style={{ flex: 1 }}>„{notice.confirmDelete.name}“ wirklich löschen?</span>
-                <Btn tone={REC_COLOR} active onClick={() => { setMyPlays(deleteMyPlay(notice.confirmDelete.id)); setNotice(""); }}>Löschen</Btn>
-                <Btn onClick={() => setNotice("")}>Abbrechen</Btn>
-              </>
-            )}
-          </div>
-        )}
-
-        {preset && (
-          <p style={{
-            margin: "8px 2px 0", fontSize: 13, lineHeight: 1.4, color: "#B9C2C9",
-            display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden",
-          }}>{preset.note}</p>
-        )}
-      </div>
-
-      <CourtStage ref={stageRef} courtType={courtType} style={{ padding: "6px 10px" }}
-        onCourtDown={onCourtDown} onCourtMove={onCourtMove} onCourtUp={onCourtUp}
-        onGestureStart={() => { dragId.current = null; stroke.current = null; }}>
-        {preset?.shapes?.map((s, i) => (
-          <polygon key={i} points={s.points.map((p) => p.join(",")).join(" ")}
-            fill="rgba(237,232,220,0.06)" stroke={CHALK} strokeWidth="0.8" strokeDasharray="3 2.5" opacity="0.7" />
-        ))}
-        {showPaths && preset?.anim && Object.entries(preset.anim).map(([id, kfs]) => (
-          <polyline key={id} points={kfs.map((k) => `${k.x},${k.y}`).join(" ")}
-            fill="none" stroke={entityColor(id)} strokeWidth="1.1" strokeDasharray={id === "ball" ? "1.5 2.5" : "4 2.5"}
-            opacity="0.5" markerEnd="url(#arrow)" />
-        ))}
-        {boardPlayers({
-          ids: showDef ? [...DEF, ...OFF] : OFF,
-          pos: displayPos,
-          prevPos: preset?.anim && progress > 0.01 ? (id) => (preset.anim[id] ? interpKF(preset.anim[id], progress - 0.01) : null) : null,
-          ball: displayPos("ball"),
-          holder: preset?.anim && progress > 0 ? null : ballOwnerId,
-          dt: 0.045,
-        }).map((p) => (
-          <Player25D key={p.id} p={p} onDown={onTokenDown} interactive={mode === "move"} />
-        ))}
-        <Ball25D ball={{ ...displayPos("ball"), z: ballOwnerId && !(preset?.anim && progress > 0) ? 3.5 : 0 }}
-          onDown={onTokenDown} interactive={mode === "move"} />
-        <g pointerEvents="none">
-          {drawings.map((d, i) => d.type === "pen" ? (
-            <polyline key={i} points={d.points.map((p) => `${p.x},${p.y}`).join(" ")}
-              fill="none" stroke={CHALK} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.92" />
-          ) : (
-            <line key={i} x1={d.x1} y1={d.y1} x2={d.x2} y2={d.y2}
-              stroke={CHALK} strokeWidth="1.4" strokeLinecap="round" opacity="0.92" markerEnd="url(#arrow)" />
-          ))}
-        </g>
-      </CourtStage>
-
-      <div style={{
-        flexShrink: 0, borderTop: "1px solid #232B32", background: "#171C21",
-        padding: "10px calc(12px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left))",
-      }}>
-        {preset?.anim && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <Btn active onClick={togglePlay}>{playing ? "❚❚ Pause" : progress >= 1 ? "↻ Nochmal" : "▶ Abspielen"}</Btn>
-            <input type="range" min="0" max="1" step="0.001" value={progress}
-              onChange={(e) => { setPlaying(false); setProgress(parseFloat(e.target.value)); }}
-              style={{ flex: 1 }} aria-label="Spielzug-Fortschritt" />
-            <Btn active={showPaths} onClick={() => setShowPaths((s) => !s)}>Wege</Btn>
-          </div>
-        )}
-
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 8 }}>
-          {!recording ? (
-            <Btn active={false} tone={REC_COLOR} onClick={startRec}>
-              <span style={{ display: "inline-block", width: 9, height: 9, borderRadius: "50%", background: REC_COLOR, marginRight: 6, verticalAlign: "middle" }} />
-              REC
-            </Btn>
-          ) : (
-            <Btn active tone={REC_COLOR} onClick={stopRec}>
-              <span style={{ display: "inline-block", width: 9, height: 9, borderRadius: "50%", background: "#16110C", marginRight: 6, verticalAlign: "middle", animation: "recpulse 1s infinite" }} />
-              ■ Stop
-            </Btn>
-          )}
-          {!recording && hasRecording && (
-            <>
-              <Btn active={replaying} tone={OFF_COLOR} onClick={() => (replaying ? stopReplay() : playFrames(bufferRef.current))}>
-                {replaying ? "■ Stopp" : "▶ Replay"}
-              </Btn>
-              <Btn active={saving} onClick={() => setSaving((s) => !s)}>✓ Speichern</Btn>
-            </>
-          )}
-          {recording && <span style={{ fontSize: 12.5, color: REC_COLOR, letterSpacing: "0.04em" }}>Aufnahme läuft …</span>}
-        </div>
-
-        {saving && !recording && (
-          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-            <input value={saveName} autoFocus onChange={(e) => setSaveName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") saveRecording(); }}
-              placeholder="Name der Sequenz, z. B. Pick & Roll Mitte"
-              style={{ flex: 1, minWidth: 0, padding: "7px 10px", borderRadius: 8, fontSize: 13, fontFamily: "inherit", color: "#E8E4DA", background: "#232B32", border: "1px solid #39424B", outline: "none" }} />
-            <Btn active onClick={saveRecording}>Sichern</Btn>
-            <Btn onClick={() => { setSaving(false); setSaveName(""); }}>Abbrechen</Btn>
-          </div>
-        )}
-
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          <Btn active={mode === "move"} onClick={() => setMode("move")}>✥ Bewegen</Btn>
-          <Btn active={mode === "pen"} onClick={() => setMode("pen")}>✎ Stift</Btn>
-          <Btn active={mode === "arrow"} onClick={() => setMode("arrow")}>↗ Pfeil</Btn>
-          <Btn onClick={() => setDrawings((d) => d.slice(0, -1))}>⌫ Rückgängig</Btn>
-          <Btn onClick={() => setDrawings([])}>Leeren</Btn>
-          <Btn active={showDef} tone={DEF_COLOR} onClick={toggleDef}>Verteidigung</Btn>
-          <Btn onClick={resetBoard}>Reset</Btn>
-        </div>
-      </div>
-    </div>
+    <>
+      <Home
+        myPlays={myPlays} builtins={PLAYS} drafts={drafts} notice={notice} onDismissNotice={() => setNotice(null)}
+        onOpen={(play, origin, mode) => openPlay(play, origin, mode)}
+        onNew={() => setNewSheet(true)}
+        onImport={() => fileRef.current?.click()}
+        onBackup={backup}
+        onBoard={() => setScreen("board")}
+        onShare={setSharePlay}
+        onDelete={askDelete}
+        onDuplicate={duplicate}
+        onExportOne={(p) => downloadJson(p, fileNameFor(p))}
+        onResumeDraft={(d) => openPlay(d.play, "draft", "edit")}
+        onDiscardDraft={(d) => setConfirm({
+          title: `Entwurf „${d.play.name}“ verwerfen?`,
+          text: "Die ungespeicherten Änderungen gehen verloren.",
+          actions: [
+            { label: "Abbrechen", onClick: () => setConfirm(null) },
+            { label: "Verwerfen", danger: true, onClick: () => { clearDraft(d.play.id); setDrafts(pendingDrafts()); setConfirm(null); } },
+          ],
+        })}
+      />
+      <input ref={fileRef} type="file" accept=".json,application/json" hidden aria-label="Spielzug-Datei importieren"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = ""; }} />
+      {newSheet && <NewPlaySheet onCreate={createPlay} onClose={() => setNewSheet(false)} />}
+      {sharePlay && <ShareSheet play={sharePlay} onClose={() => setSharePlay(null)} />}
+      {confirm && <Dialog title={confirm.title} onClose={() => setConfirm(null)} actions={confirm.actions}>{confirm.text}</Dialog>}
+    </>
   );
 }

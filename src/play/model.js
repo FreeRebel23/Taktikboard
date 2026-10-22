@@ -65,18 +65,21 @@ export function validatePlay(play) {
   const errors = [];
   const warnings = [];
   const ids = new Set();
+  // Meldungen mit Rückennummern statt interner IDs ("2", "X1" statt "o2", "d1")
+  const L = (id) => play.entities?.find((e) => e.id === id)?.label ?? id;
+  const A = (type) => ACTIONS[type]?.label ?? type;
 
   for (const e of play.entities ?? []) {
-    if (ids.has(e.id)) errors.push(`Entity "${e.id}" doppelt`);
+    if (ids.has(e.id)) errors.push(`Entity "${L(e.id)}" doppelt`);
     ids.add(e.id);
-    if (e.team !== "offense" && e.team !== "defense") errors.push(`Entity "${e.id}": unbekanntes Team "${e.team}"`);
-    if (!play.start?.positions?.[e.id]) errors.push(`Entity "${e.id}": keine Startposition`);
+    if (e.team !== "offense" && e.team !== "defense") errors.push(`Entity "${L(e.id)}": unbekanntes Team "${e.team}"`);
+    if (!play.start?.positions?.[e.id]) errors.push(`Entity "${L(e.id)}": keine Startposition`);
   }
   const isOff = (id) => teamOf(play, id) === "offense";
   const isDef = (id) => teamOf(play, id) === "defense";
 
   let holder = play.start?.ball ?? null;
-  if (holder && !ids.has(holder)) errors.push(`Startball bei unbekannter Spielerin "${holder}"`);
+  if (holder && !ids.has(holder)) errors.push(`Startball bei unbekannter Spielerin "${L(holder)}"`);
 
   (play.beats ?? []).forEach((beat, bi) => {
     const where = `Beat ${bi + 1} (${beat.title ?? beat.id})`;
@@ -94,26 +97,26 @@ export function validatePlay(play) {
       if (start < 0 || end > 1 || end <= start) errors.push(`${where}: "${a.type}" hat ungültiges Zeitfenster [${start}, ${end}]`);
 
       for (const pid of actorsOf(a)) {
-        if (!ids.has(pid)) { errors.push(`${where}: "${a.type}" – unbekannte Spielerin "${pid}"`); continue; }
+        if (!ids.has(pid)) { errors.push(`${where}: "${a.type}" – unbekannte Spielerin "${L(pid)}"`); continue; }
         const list = windows.get(pid) ?? [];
         for (const w of list) {
-          if (start < w.end - EPS && w.start < end - EPS) errors.push(`${where}: "${pid}" hat überlappende Aktionen (${w.type} / ${a.type})`);
+          if (start < w.end - EPS && w.start < end - EPS) errors.push(`${where}: ${L(pid)} hat zwei Aktionen gleichzeitig (${A(w.type)} und ${A(a.type)}) – Zeitfenster anpassen oder eine Aktion löschen`);
         }
         list.push({ start, end, type: a.type });
         windows.set(pid, list);
       }
 
-      if (def.kind === "path" && !a.to) errors.push(`${where}: "${a.type}" von "${a.player}" braucht ein Ziel (to)`);
+      if (def.kind === "path" && !a.to) errors.push(`${where}: ${A(a.type)} von ${L(a.player)} hat kein Ziel`);
       if (def.kind === "relation" && def.implemented) {
-        if (!ids.has(a.target)) errors.push(`${where}: "${a.type}" braucht ein gültiges target`);
-        else if (!isOff(a.target)) errors.push(`${where}: "${a.type}" – target "${a.target}" muss Offense sein`);
-        for (const pid of actorsOf(a)) if (ids.has(pid) && !isDef(pid)) errors.push(`${where}: "${a.type}" nur für Defense ("${pid}")`);
+        if (!ids.has(a.target)) errors.push(`${where}: ${A(a.type)} braucht eine Gegenspielerin als Ziel`);
+        else if (!isOff(a.target)) errors.push(`${where}: ${A(a.type)} – das Ziel (${L(a.target)}) muss eine Angreiferin sein`);
+        for (const pid of actorsOf(a)) if (ids.has(pid) && !isDef(pid)) errors.push(`${where}: ${A(a.type)} können nur Verteidigerinnen ausführen (${L(pid)})`);
       }
-      if (a.type === "trap" && (a.players?.length ?? 0) !== 2) errors.push(`${where}: trap braucht genau zwei players`);
+      if (a.type === "trap" && (a.players?.length ?? 0) !== 2) errors.push(`${where}: Ein Trap braucht genau zwei Verteidigerinnen`);
       if (def.needsBall && a.player !== holder) {
         // Dribbling nach einem Pass im selben Beat ist erlaubt, wenn der Pass vorher ankommt
         const recv = passesOf(beat).find((p) => p.to === a.player && (p.end ?? 1) <= start + EPS);
-        if (!recv) errors.push(`${where}: "${a.player}" dribbelt ohne Ball`);
+        if (!recv) errors.push(`${where}: ${L(a.player)} dribbelt ohne Ball`);
       }
     }
 
@@ -122,27 +125,27 @@ export function validatePlay(play) {
     for (const p of passesOf(beat)) {
       const { start, end } = actionWindow(p);
       if (p.kind && !PASS_KINDS[p.kind]) errors.push(`${where}: unbekannte Passart "${p.kind}"`);
-      if (p.from !== holder) errors.push(`${where}: Pass von "${p.from}", aber Ball ist bei "${holder}"`);
-      if (!ids.has(p.to)) errors.push(`${where}: Pass an unbekannte Spielerin "${p.to}"`);
-      else if (teamOf(play, p.to) !== teamOf(play, p.from)) warnings.push(`${where}: Pass von "${p.from}" an Gegnerin "${p.to}"`);
-      if (start < lastEnd - EPS) errors.push(`${where}: Pässe überlappen zeitlich`);
+      if (p.from !== holder) errors.push(`${where}: Pass von ${L(p.from)}, aber der Ball ist zu diesem Zeitpunkt bei ${holder ? L(holder) : "niemandem"}`);
+      if (!ids.has(p.to)) errors.push(`${where}: Pass an unbekannte Spielerin "${L(p.to)}"`);
+      else if (teamOf(play, p.to) !== teamOf(play, p.from)) warnings.push(`${where}: Pass von "${L(p.from)}" an Gegnerin "${L(p.to)}"`);
+      if (start < lastEnd - EPS) errors.push(`${where}: Zwei Pässe überschneiden sich zeitlich`);
       lastEnd = end;
       holder = p.to;
     }
 
     for (const [pid, r] of Object.entries(beat.roles ?? {})) {
-      if (!ids.has(pid)) errors.push(`${where}: Coaching für unbekannte Spielerin "${pid}"`);
-      if (r.watch && r.watch !== "ball" && typeof r.watch === "string" && !ids.has(r.watch)) errors.push(`${where}: "${pid}" beobachtet unbekannte Spielerin "${r.watch}"`);
-      if (r.stance && !STANCES[r.stance]) warnings.push(`${where}: unbekannte Haltung "${r.stance}" bei "${pid}"`);
+      if (!ids.has(pid)) errors.push(`${where}: Coaching für unbekannte Spielerin "${L(pid)}"`);
+      if (r.watch && r.watch !== "ball" && typeof r.watch === "string" && !ids.has(r.watch)) errors.push(`${where}: "${L(pid)}" beobachtet unbekannte Spielerin "${L(r.watch)}"`);
+      if (r.stance && !STANCES[r.stance]) warnings.push(`${where}: unbekannte Haltung "${r.stance}" bei "${L(pid)}"`);
     }
 
     for (const f of beat.focus ?? []) {
-      if (!ids.has(f.player)) errors.push(`${where}: focus auf unbekannte Spielerin "${f.player}"`);
+      if (!ids.has(f.player)) errors.push(`${where}: focus auf unbekannte Spielerin "${L(f.player)}"`);
     }
   });
 
   for (const l of play.lines ?? []) {
-    for (const m of l.members ?? []) if (!ids.has(m)) errors.push(`Linie "${l.id}": unbekanntes Mitglied "${m}"`);
+    for (const m of l.members ?? []) if (!ids.has(m)) errors.push(`Linie "${l.id}": unbekanntes Mitglied "${L(m)}"`);
     if (beatIndexById(play, l.anchorBeat) < 0) errors.push(`Linie "${l.id}": anchorBeat "${l.anchorBeat}" unbekannt`);
   }
 
