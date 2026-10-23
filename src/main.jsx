@@ -1,9 +1,16 @@
+import "@fontsource/archivo-narrow/latin-500.css";
+import "@fontsource/archivo-narrow/latin-700.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import Taktikboard from "./Taktikboard.jsx";
+import GlobalStyle from "./ui/GlobalStyle.jsx";
+import ErrorBoundary from "./ui/ErrorBoundary.jsx";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
-    <Taktikboard />
+    <GlobalStyle />
+    <ErrorBoundary>
+      <Taktikboard />
+    </ErrorBoundary>
   </StrictMode>
 );

@@ -31,9 +31,35 @@ Handy/Tablet (gleiches WLAN) im Browser öffnen.
 > Static-Host mit HTTPS ablegen (z. B. Netlify, Vercel, GitHub Pages) – die App ist
 > dank `base: "./"` ohne weitere Konfiguration deploybar.
 
+## Tests
+
+```bash
+npm test           # Unit-Tests: Modell, Engine, Varianten, Read-Training, Speicher, Teilen (node:test)
+npm run e2e        # Browser-Tests (Playwright): Telefon- und Tablet-Profil, baut vorher automatisch
+E2E_WEBKIT=1 npm run e2e   # zusätzlich iPhone/iPad (WebKit) – vorher: npx playwright install webkit
+```
+
+Die Browser-Tests laufen in GitHub Actions für jeden Pull Request (Workflow „Tests“).
+Für echte Geräte: [`GERAETETEST.md`](GERAETETEST.md). Pilot und Veröffentlichung: [`PILOT.md`](PILOT.md).
+
+## Nutzung in Kürze
+- **Startbildschirm:** eigene Spielzüge und Beispiele; „+ Neuer Spielzug“ (Vorlage wählen), „Importieren“, „Sicherung herunterladen“, „App teilen“ (QR-Code), „Freies Board“.
+- **Trainer:** Varianten (Reads) zeigen, Fokus-Kamera, Analyse-Ebenen (Modell-Einschätzung), Zeichnen.
+- **Lernen:** ganzes Team, eine Position („Ich bin die 5“) oder Zusammenspiel mehrerer – für Angriff und Verteidigung. Mit „Weiter“ Beat für Beat: Aufgaben, Zustände der Verteidigung (Druck, Deny, Help …), Prinzipien; am Read das **Read-Training**.
+- **Verteidigung als System:** Mann-Mann und Zonen nach den Regeln der Trainerin (Builder → Aufstellung → Regeln der Verteidigung).
+- **Bearbeiten:** Figur antippen → Aktion → Ziel antippen; Ziel/Umweg ziehen; Rückgängig; Coaching pro Rolle; „+ Read“ für Varianten. Speichern wird bestätigt, Entwürfe werden automatisch gesichert.
+- **Teilen:** Link (öffnet direkt die Spielerinnen-Ansicht), System-Teilen oder Datei – ohne Konto und ohne Server.
+
 ## Aufbau
-- `src/Taktikboard.jsx` – die komplette App-Komponente
-- `src/main.jsx` – React-Einstiegspunkt
+- `src/Taktikboard.jsx` – App-Hülle (Startbildschirm, Import/Sicherung, geteilte Links)
+- `src/home/` – Startbildschirm, Neuer Spielzug · `src/board/` – Freies Board (Drag, Zeichnen, Legacy-Presets, REC)
+- `e2e/`, `playwright.config.js` – Browser-Tests
+- `src/studio/` – Play-Studio: Trainer-, Spielerinnen- und Bearbeiten-Ansicht, Teilen
+- `src/play/` – Basketball-Kern ohne UI: Datenmodell, Varianten, Engine, Analyse, Kamera, Plays
+- `src/render/` – 2,5D-Spielerinnen, Ball, taktische Ebenen
+- `src/ui/`, `src/hooks/`, `src/store/`, `src/court/`, `src/legacy/` – Bühne/Bedienelemente, Hooks, Speicher/Teilen, Spielfeld, Bestand
 - `vite.config.js` – Vite + PWA-Konfiguration (Manifest, Service Worker)
-- `scripts/gen-icons.mjs` – generiert die PWA-Icons
-- `public/` – Icons & favicon
+- `scripts/gen-icons.mjs`, `public/` – Icons
+
+Architektur, Datenmodell und Stand: siehe [`DEVELOPMENT_STATUS.md`](DEVELOPMENT_STATUS.md).
+Produktleitbild: [`NORTH_STAR.md`](NORTH_STAR.md).
