@@ -1,10 +1,39 @@
 # Taktikboard – Development Status
 
-Stand: dritter Entwicklungsdurchlauf („Pilotfähigkeit“) auf PR #1.
+Stand: vierter Entwicklungsdurchlauf („Mannschaft, Verteidigung, visuelle Sprache“) auf PR #1.
 Leitbild: [`NORTH_STAR.md`](NORTH_STAR.md). Der Trainer modelliert Basketball, das Board macht es verständlich.
 
 Pilot-Dokumente: [`PILOT.md`](PILOT.md) (HTTPS-Strategie, Schritte, Datenhinweise) ·
 [`GERAETETEST.md`](GERAETETEST.md) (iOS/Android-Checkliste) · [`PRAXISTEST.md`](PRAXISTEST.md) (Test mit Mannschaft).
+
+## Vierter Durchlauf: Mannschaft, Verteidigung, visuelle Sprache
+
+Ziel: Basketball verstehen statt Laufwege auswendig lernen – jede Spielerin soll das Zusammenspiel aller fünf
+verstehen und jede Position ausfüllen können; Angriff und Verteidigung gleichwertig.
+
+| Bereich | Was entstanden ist | Stand |
+|---|---|---|
+| **Mannschaftsverteidigung als System** (`src/play/teamDefense.js`) | System-Aktionen `man` (Mann-Mann) und `zone` (Raum). Positionen entstehen in jedem Moment aus Ball, Gegenspielerin/Raum und Korb nach **Regeln der Trainerin** – keine eingebaute Philosophie. Regeln: Abstand am Ball (nah/weit vom Korb), „eine Passlänge“, Deny oder Lücke, Tiefe der Help-Seite, Help an/aus, wer hilft (Nächste / Low Man), Rotation, Zonenräume, Verschieben, Reaktionszeit. Grundregel „immer näher am Korb als die Gegenspielerin“ ist eingebaut. | implementiert, 12 Unit-Tests |
+| | Simulation je Beat mit Reaktionszeit und Höchstgeschwindigkeit (Sliden am Ball, Sprint bei Help/Recover/Closeout): Help, Recover, Closeout, Rotation und **Übergaben** entstehen als Bewegung – deterministisch, abfragbar zu jedem t. Zuständigkeiten laufen über Beat-Grenzen weiter. | implementiert, getestet (Geschwindigkeitsgrenze, Determinismus) |
+| | Zustände je Moment: DRUCK, DENY, LÜCKE, HELP-SEITE, HELP, ROTATION, RECOVER, CLOSEOUT, ZONE, IM RAUM – mit Zuständigkeit (wer verteidigt wen) | implementiert |
+| **Referenzfälle** | „Mann-Mann – Help & Recover“ (5 Beats: Ball oben, Pass auf den Flügel – alle bewegen sich mit, Drive – Help, Bodenpass – Recover/Closeout, Lob auf die andere Seite – Closeout und Neuordnung) und „2-3-Zone – Verschieben und Übergeben“ (6 Beats: Grundstellung, Flügel, Ecke, Cut mit Übergabe X4→X5, schnelle Ballverlagerung über drei Pässe, Closeout). Rollen für alle zehn, Prinzipien je Beat. | implementiert, gültig ohne Warnungen |
+| **Mannschaftsperspektive** (Lernansicht) | Jederzeit **Team** (alle fünf gleichwertig), **eine Position** oder **Zusammenspiel** mehrerer (＋); Seitenwechsel Angriff ⇄ Verteidigung. Teamkarte mit Aufgabe aller fünf und live Zustand; Einzelansicht zeigt „Zusammenspiel“ mit den beteiligten Mitspielerinnen; andere Figuren nur noch leicht gedimmt. | implementiert, E2E |
+| **Prinzipien** | `play.principles` (Titel, Regel, Warum) + Zuordnung je Beat; Anzeige in Lern- und Traineransicht | implementiert, E2E |
+| **Builder** | „Teamverteidigung für alle fünf“ (Mann-Mann, 2-3, 3-2), Einzelaktionen Mann-Mann/Zone, Regel-Editor, Prinzipien-Editor, Art Angriff/Verteidigung | implementiert, Unit + E2E |
+| **Visuelle Sprache** | Audit mit Screenshots (Befund: Bodenpass = Direktpass, Lob zu flach, Bodenpass im Beispiel schneller als Direktpässe, Block unsichtbar, „gestrichelt“ doppelt belegt). Jetzt: **durchgezogen = Bewegung, gestrichelt = Ball, gepunktet = Zuständigkeit**; Direktpass flach mit Tempostreifen, Bodenpass mit Aufsetzring, Lob mit hohem Bogen und wachsendem Ball; Block als Balken am Boden; Armhaltungen für Help und Block; Zustandsfarben rot/gelb/blau/grau; Legende im Trainer- und Lernmodus. Passtempo wird je Passart geprüft (Warnung im Builder), Beispiel-Zeitfenster korrigiert. | implementiert, per Screenshot geprüft |
+
+**Entscheidung Perspektive/3D:** Draufsicht 2,5D bleibt. Alles, was Verteidigung erklärt (Abstände, Linien Ball–Gegnerin–Korb,
+Räume, Zuständigkeiten), ist in der Draufsicht exakt lesbar; eine geneigte Kamera verzerrt genau diese Abstände und
+verdeckt Figuren hintereinander. Höhe wird dort gezeigt, wo sie Bedeutung hat: Ballflug (Lob/Bodenpass), Schatten, Arme.
+
+**Grenzen (ehrlich):**
+- Das Regelmodell ist eine **didaktische Vereinfachung**: Es kennt keine Körperkontakte, Fouls, Verteidigung von Screens
+  im System (Switch/Hedge im System) oder Mehrfach-Rotationen (X-out). Explizite Aktionen (Switch, Trap, Closeout) bleiben dafür nutzbar.
+- „Geschlagen“ wird aus Geometrie erkannt; im Referenzfall ist X2 im Drive bewusst als geschlagen modelliert (eigener Laufweg).
+- Zonenräume sind Rechtecke aus Vorlagen; im Builder wählbar (2-3, 3-2), aber noch nicht auf dem Feld verformbar.
+- Pässe in eine gut stehende Verteidigung meldet die Passlinien-Analyse als geschlossen; in den Verteidigungsbeispielen sind
+  solche Pässe ausdrücklich als `contested` markiert (bewusst gegen die Verteidigung gespielt).
+- Figuren können sich in engen Situationen (Block, Trap) überlappen – keine Kollisionsvermeidung.
 
 ## Dritter Durchlauf: Pilotfähigkeit
 
@@ -166,7 +195,8 @@ Alle Ebenen sind zuschaltbar und stehen nur in der Trainer-Ansicht. Sie tragen s
 
 ## Was getestet wurde
 
-> Stand dritter Durchlauf: **102 Unit-Tests** (`npm test`) und **42 Browser-Tests** (`npm run e2e`, je 21 auf Telefon- und Tablet-Profil, Chromium) – alle grün.
+> Stand vierter Durchlauf: **118 Unit-Tests** (`npm test`) und **50 Browser-Tests** (`npm run e2e`, je 25 auf Telefon- und Tablet-Profil, Chromium) – alle grün. In CI zusätzlich iPhone-/iPad-Profil (WebKit).
+> Stand dritter Durchlauf: 102 Unit-Tests und 42 Browser-Tests.
 > Die Browser-Suite deckt jetzt auch Startbildschirm, Builder-Datensicherheit (Bestätigung, Entwurf, Rückfrage, voller Speicher), Read-Training, QR/Teilen-Hinweise, REC-Speicherfehler und „keine fremden Server“ ab.
 > WebKit (iPhone/iPad-Profil) läuft in CI; lokal ist keine WebKit-Engine installiert. Echte Geräte: siehe GERAETETEST.md – **noch nicht durchgeführt**.
 

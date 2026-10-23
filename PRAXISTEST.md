@@ -27,6 +27,19 @@ Beobachter:in notiert je Spielerin: Hilfe nötig (wie oft, wobei), Zeit für A1/
 (wörtlich). Die Read-Antworten zählt die App selbst: Startbildschirm → **Read-Training → „Als
 Tabelle herunterladen“** (enthält keine Namen).
 
+## Teil A2 – Mannschaft und Verteidigung verstehen (10 min)
+
+Spielzug „Mann-Mann – Help & Recover“, Lernansicht → **Team**. Je Spielerin eine Frage, die sich nur mit dem
+Zusammenspiel beantworten lässt (nicht mit einem auswendig gelernten Laufweg):
+
+| Frage | Richtig, wenn … |
+|---|---|
+| „Warum steht X4 so weit weg von ihrer Gegenspielerin?“ (Beat 1) | Help-Seite / zwei Pässe weg / Ball und Gegnerin sehen |
+| „Was ändert sich für alle fünf, wenn der Ball auf den Flügel geht?“ (Beat 2) | alle bewegen sich mit dem Pass; Rollen Deny ↔ Help-Seite wechseln |
+| „2 ist vorbei. Wer hilft – und wer ist dann frei?“ (Beat 3) | X5 hilft, 5 wird frei |
+| **Positionswechsel:** „Du spielst heute X2 statt X5. Was machst du in Beat 3?“ | erklärt die Aufgabe der anderen Position |
+| 2-3-Zone, Beat 4: „Warum übernimmt X5 die 5?“ | 5 kommt in ihren Raum; Übergabe/Ansage |
+
 ## Teil B – Auf dem Feld (10 min)
 
 Fünf Spielerinnen laufen den Spielzug **ohne weitere Erklärung** gegen eine Verteidigung, die eine
@@ -54,7 +67,7 @@ Pass und ein Laufweg), speichere ihn und schicke ihn einer Spielerin.“
 ## Teil D – Kurzbefragung (5 min)
 
 **Spielerinnen** (Smileys 😀 🙂 😐 🙁):
-1. Ich wusste, was ich tun soll.
+1. Ich wusste, was ich tun soll – und was die anderen vier tun.
 2. Ich wusste, **wann** ich loslaufen soll.
 3. Das Read-Training hat mir geholfen, die Verteidigung zu lesen.
 4. Am Handy war alles gut lesbar und bedienbar.
@@ -70,6 +83,7 @@ Pass und ein Laufweg), speichere ihn und schicke ihn einer Spielerin.“
 ## Erfolgskriterien für den Pilot
 
 * ≥ 80 % der Spielerinnen lösen A2 richtig und erreichen in Teil B ≥ 4 von 6 Punkten.
+* Teil A2: ≥ 70 % der Antworten richtig, **auch beim Positionswechsel** (Ziel: Zusammenspiel verstanden, nicht nur der eigene Weg).
 * Read-Training: Trefferquote im 3. Durchgang ≥ 70 % (aus der CSV).
 * Trainer:in schafft Teil C in ≤ 10 min, **ohne Datenverlust**.
 * Mittelwert Trainer-Fragen 2 und 3 ≥ 4.

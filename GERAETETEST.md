@@ -39,12 +39,19 @@ Ergebnis je Zeile: ✓ / ✗ + Notiz. Bei ✗ Bildschirmfoto machen.
 10. Zeitlupe 🐢, Schritt nochmal ↻, Zeitleiste mit dem Finger ziehen.
 11. Gerät drehen (Querformat) → Feld größer, nichts überlappt.
 
+### B2. Mannschaft und Verteidigung
+- „Mann-Mann – Help & Recover“ → Lernen → **Team**: Zustandsplaketten (DRUCK, DENY, HELP …) im Sonnen-/Hallenlicht lesbar, nicht verdeckt.
+- Position antippen, ＋ für Zusammenspiel, „Angriff ⇄“ – Wechsel ohne Ruckeln.
+- „2-3-Zone“: Übergabe beim Cut (Beat 4) sichtbar; Zonenräume stören nicht.
+- Pässe: Bodenpass (Aufsetzring), Lob (hoher Bogen) und Direktpass (Tempostreifen) ohne Text unterscheidbar.
+
 ### C. Trainer:in / Builder (Tablet oder Handy quer)
 12. „+ Neuer Spielzug“ → Vorlage „Horns“ → Beat 1: Spielerin antippen → „Cut“ → Ziel antippen.
 13. Ziel-Raute mit dem Finger verschieben; Pinch-Zoom und Verschieben des Feldes.
 14. Speichern → „✓ Gespeichert HH:MM“. App komplett schließen, neu öffnen → Spielzug da.
 15. Änderung machen, **nicht** speichern, App schließen → beim Öffnen „Ungesicherte Entwürfe“ → wiederherstellen.
 16. „← Fertig“ mit ungespeicherten Änderungen → Rückfrage erscheint.
+16b. Beat → „Mann-Mann“ für alle fünf; Aufstellung → Regel „Eine Passlänge entfernt: Lücke“ → Beat abspielen: Verteidigung steht anders.
 
 ### D. Teilen
 17. Teilen → „Teilen …“ → System-Teilen-Dialog (WhatsApp/Messenger) → an zweites Gerät.

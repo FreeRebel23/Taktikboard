@@ -45,7 +45,8 @@ Für echte Geräte: [`GERAETETEST.md`](GERAETETEST.md). Pilot und Veröffentlich
 ## Nutzung in Kürze
 - **Startbildschirm:** eigene Spielzüge und Beispiele; „+ Neuer Spielzug“ (Vorlage wählen), „Importieren“, „Sicherung herunterladen“, „App teilen“ (QR-Code), „Freies Board“.
 - **Trainer:** Varianten (Reads) zeigen, Fokus-Kamera, Analyse-Ebenen (Modell-Einschätzung), Zeichnen.
-- **Spielerin:** Position wählen („Ich bin die 5“), mit „Weiter“ Beat für Beat: Aufgabe, Wann, Achte auf, Ziel und Haltung; am Read das **Read-Training** (Verteidigung ansehen → entscheiden → Rückmeldung).
+- **Lernen:** ganzes Team, eine Position („Ich bin die 5“) oder Zusammenspiel mehrerer – für Angriff und Verteidigung. Mit „Weiter“ Beat für Beat: Aufgaben, Zustände der Verteidigung (Druck, Deny, Help …), Prinzipien; am Read das **Read-Training**.
+- **Verteidigung als System:** Mann-Mann und Zonen nach den Regeln der Trainerin (Builder → Aufstellung → Regeln der Verteidigung).
 - **Bearbeiten:** Figur antippen → Aktion → Ziel antippen; Ziel/Umweg ziehen; Rückgängig; Coaching pro Rolle; „+ Read“ für Varianten. Speichern wird bestätigt, Entwürfe werden automatisch gesichert.
 - **Teilen:** Link (öffnet direkt die Spielerinnen-Ansicht), System-Teilen oder Datei – ohne Konto und ohne Server.
 
