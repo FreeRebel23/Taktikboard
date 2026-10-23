@@ -4,7 +4,7 @@
 dass sie ihn auf dem Feld richtig laufen? Und können Trainer:innen einen Spielzug selbst anlegen,
 sicher speichern und teilen?
 
-**Dauer:** ca. 45 min · **Teilnehmende:** 1–2 Trainer:innen, 6–10 Spielerinnen (eigene Handys,
+**Dauer:** ca. 55 min · **Teilnehmende:** 1–2 Trainer:innen, 6–10 Spielerinnen (eigene Handys,
 alternativ 2–3 Leihgeräte) · **Benötigt:** Pilot-Adresse (HTTPS), dieser Bogen, Stoppuhr.
 
 Vorher (Trainer:in, 10 min, zu Hause): App installieren, „Press Break“ oder „Pick & Roll“ ansehen,
@@ -27,7 +27,7 @@ Beobachter:in notiert je Spielerin: Hilfe nötig (wie oft, wobei), Zeit für A1/
 (wörtlich). Die Read-Antworten zählt die App selbst: Startbildschirm → **Read-Training → „Als
 Tabelle herunterladen“** (enthält keine Namen).
 
-## Teil A2 – Mannschaft und Verteidigung verstehen (10 min)
+## Teil M – Mannschaft und Verteidigung verstehen (10 min)
 
 Spielzug „Mann-Mann – Help & Recover“, Lernansicht → **Team**. Je Spielerin eine Frage, die sich nur mit dem
 Zusammenspiel beantworten lässt (nicht mit einem auswendig gelernten Laufweg):
@@ -83,7 +83,7 @@ Pass und ein Laufweg), speichere ihn und schicke ihn einer Spielerin.“
 ## Erfolgskriterien für den Pilot
 
 * ≥ 80 % der Spielerinnen lösen A2 richtig und erreichen in Teil B ≥ 4 von 6 Punkten.
-* Teil A2: ≥ 70 % der Antworten richtig, **auch beim Positionswechsel** (Ziel: Zusammenspiel verstanden, nicht nur der eigene Weg).
+* Teil M: ≥ 70 % der Antworten richtig, **auch beim Positionswechsel** (Ziel: Zusammenspiel verstanden, nicht nur der eigene Weg).
 * Read-Training: Trefferquote im 3. Durchgang ≥ 70 % (aus der CSV).
 * Trainer:in schafft Teil C in ≤ 10 min, **ohne Datenverlust**.
 * Mittelwert Trainer-Fragen 2 und 3 ≥ 4.
