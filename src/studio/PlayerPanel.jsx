@@ -58,6 +58,7 @@ export function HowTo() {
 
 /** Legende: was bedeuten die Zeichen auf dem Feld und die Knöpfe? */
 export function Legend() {
+  // Eine visuelle Sprache für Angriff und Verteidigung: Bewegung durchgezogen, Ball gestrichelt, Zuständigkeit gepunktet
   const row = (sym, text) => (
     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
       <span style={{ flexShrink: 0, width: 34, textAlign: "center", fontWeight: 800 }}>{sym}</span>
@@ -71,6 +72,14 @@ export function Legend() {
       {row("- ◉ -", "Gestrichelte Linie mit Auge: Darauf achtest du.")}
       {row(<span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 5, background: "#fff" }} />, "Weißer Punkt auf der Zeitleiste: Hier bist du dran.")}
       {row(<span style={{ display: "inline-block", width: 9, height: 9, transform: "rotate(45deg)", background: C_UI.warn }} />, "Gelbe Raute: Read – hier entscheidest du.")}
+      {row(<svg width="34" height="10" aria-hidden="true"><line x1="2" y1="5" x2="32" y2="5" stroke={OFF_COLOR} strokeWidth="2.2" strokeLinecap="round" /></svg>, "Durchgezogene Linie: Laufweg (dick = Sprint/Cut, Zickzack = Dribbling).")}
+      {row(<svg width="34" height="12" aria-hidden="true"><line x1="2" y1="6" x2="26" y2="6" stroke={OFF_COLOR} strokeWidth="2" /><line x1="27" y1="1" x2="27" y2="11" stroke="#EDE8DC" strokeWidth="3" /></svg>, "Weißer Balken: Block (Screen).")}
+      {row(<svg width="34" height="10" aria-hidden="true"><line x1="2" y1="5" x2="32" y2="5" stroke="#EDE8DC" strokeWidth="2" strokeDasharray="5 2" /></svg>, "Gestrichelt: Pass. Gerade mit Tempostreifen = harter Direktpass.")}
+      {row(<svg width="34" height="12" aria-hidden="true"><line x1="2" y1="6" x2="32" y2="6" stroke="#EDE8DC" strokeWidth="1.6" strokeDasharray="2 2" /><circle cx="20" cy="6" r="3.5" fill="none" stroke="#EDE8DC" /></svg>, "Kreis am Boden: Bodenpass setzt hier auf.")}
+      {row(<svg width="34" height="14" aria-hidden="true"><path d="M2 12 Q17 -6 32 12" fill="none" stroke="#EDE8DC" strokeWidth="1.6" strokeDasharray="3 2" /></svg>, "Bogen, großer Ball: Lob über die Verteidigung.")}
+      {row(<svg width="34" height="10" aria-hidden="true"><line x1="2" y1="5" x2="32" y2="5" stroke="#94A6B5" strokeWidth="2" strokeDasharray="1 3" strokeLinecap="round" /></svg>, "Gepunktet: Zuständigkeit – wer verteidigt wen.")}
+      {row(<span style={{ display: "inline-flex", gap: 2 }}>{["#E0463A", "#FFD166", "#7FB2DE", "#94A6B5"].map((c) => <span key={c} style={{ width: 7, height: 7, borderRadius: 4, background: c }} />)}</span>,
+        "Verteidigung: rot = Druck am Ball, gelb = Hilfe/Recover, blau = Passweg zustellen, grau = absichern (Help-Seite, Zone).")}
       {row("◀ ↻", "Einen Schritt zurück · den letzten Schritt nochmal zeigen.")}
       {row("🐢", "Zeitlupe: alles halb so schnell.")}
       {row("▶▶", "Bis zum nächsten Read (oder bis zum Ende) abspielen.")}

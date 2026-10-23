@@ -575,6 +575,7 @@ export function sampleFrame(C, t) {
       z: flightHeight(kind, ph.s, dist(from, to)),
       from: ph.pass.from, to: ph.pass.to, fromPos: from, toPos: to, progress: ph.s,
       kind, lob: kind === "lob",
+      speed: dist(from, to) / 10 / Math.max(0.05, (ph.end - ph.start) * b.dur), // m/s – für die Darstellung
     };
   } else if (ph.state === "dribble") {
     const pl = players[ph.holder];

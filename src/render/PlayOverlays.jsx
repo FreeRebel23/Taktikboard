@@ -166,9 +166,10 @@ function zigzag(points, amp = 1.6, wave = 4) {
   return out;
 }
 
-/** Laufwege des aktuellen Beats in Trainer-Notation:
- *  durchgezogen = Laufweg, dick = Sprint, Zickzack = Dribbling, T = Screen,
- *  gestrichelt = Pass, fein gepunktet = Verteidigungs-Rotation */
+/** Laufwege des aktuellen Beats in Trainer-Notation – eine Grammatik für beide Teams:
+ *  durchgezogen = Bewegung (dick = Sprint/Cut, Zickzack = Dribbling, T = Block),
+ *  gestrichelt  = Ball (gerade = Direktpass, mit Aufsetzpunkt = Bodenpass, Bogen = Lob),
+ *  gepunktet    = Zuständigkeit (nur in der Verteidigungsebene, nicht hier) */
 export function DiagramOverlay({ items }) {
   return (
     <g pointerEvents="none">
@@ -177,10 +178,28 @@ export function DiagramOverlay({ items }) {
         const pts = it.kind === "dribble" ? zigzag(it.points) : it.points;
         const common = { fill: "none", stroke: color, strokeLinecap: "round", strokeLinejoin: "round" };
         if (it.kind === "pass") {
-          return <path key={i} d={pathD(pts)} {...common} strokeWidth="1" strokeDasharray={it.passKind === "lob" ? "4 2" : it.passKind === "bounce" ? "1 1.4" : "2 1.6"} opacity="0.75" markerEnd="url(#arrow)" />;
+          const [a, b] = it.points;
+          const L = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+          if (it.passKind === "lob") {
+            // Bogen: Kontrollpunkt seitlich versetzt – klassische Notation für den hohen Pass
+            const c = { x: (a.x + b.x) / 2 - ((b.y - a.y) / L) * L * 0.22, y: (a.y + b.y) / 2 + ((b.x - a.x) / L) * L * 0.22 };
+            return <path key={i} d={`M ${a.x} ${a.y} Q ${c.x} ${c.y} ${b.x} ${b.y}`} {...common} strokeWidth="1" strokeDasharray="2.6 1.6" opacity="0.8" markerEnd="url(#arrow)" />;
+          }
+          if (it.passKind === "bounce") {
+            const m = { x: a.x + (b.x - a.x) * 0.6, y: a.y + (b.y - a.y) * 0.6 };
+            return (
+              <g key={i} opacity="0.8">
+                <path d={pathD(pts)} {...common} strokeWidth="1" strokeDasharray="1.2 1.4" markerEnd="url(#arrow)" />
+                <circle cx={m.x} cy={m.y} r="1.8" fill="none" stroke={CHALK} strokeWidth="0.8" />
+                <circle cx={m.x} cy={m.y} r="0.6" fill={CHALK} />
+              </g>
+            );
+          }
+          return <path key={i} d={pathD(pts)} {...common} strokeWidth="1.2" strokeDasharray="3 1.2" opacity="0.8" markerEnd="url(#arrow)" />;
         }
         if (it.kind === "relation") {
-          return <path key={i} d={pathD(pts)} {...common} strokeWidth="0.8" strokeDasharray="0.8 1.6" opacity="0.7" markerEnd="url(#arrow)" />;
+          // Bewegung der Verteidigung: ebenfalls durchgezogen (Bewegung), etwas dünner
+          return <path key={i} d={pathD(pts)} {...common} strokeWidth="0.9" opacity="0.6" markerEnd="url(#arrow)" />;
         }
         const end = it.points[it.points.length - 1];
         const prev = it.points[it.points.length - 2] ?? end;

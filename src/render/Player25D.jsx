@@ -29,6 +29,8 @@ const ARMS = {
   "arms-up": [[1, -5.2, 5.2, -6.2], [1, 5.2, 5.2, 6.2]],
   deny: [[1, -5.4, 7.4, -6.8]],
   closeout: [[1.2, -4.6, 8.2, -2.6], [1, 5.4, 5.6, 7.4]],
+  help: [[0.6, -5.4, 2.6, -10.4], [0.6, 5.4, 2.6, 10.4]],   // breit: den Drive stoppen
+  screen: [[1.4, -4.4, 4.2, 1.2], [1.4, 4.4, 4.2, -1.2]],    // Arme vor dem Körper verschränkt
 };
 
 export function PlayerDefs() {
@@ -76,7 +78,7 @@ export function PlayerTrail({ p }) {
   );
 }
 
-const WIDE = new Set(["on-ball", "trap", "deny", "closeout", "arms-up", "screen", "defense"]);
+const WIDE = new Set(["on-ball", "trap", "deny", "closeout", "arms-up", "screen", "defense", "help"]);
 
 /** Füße im Körper-Koordinatensystem: [x, y] je Fuß (x = vorne) */
 export function feetFor(p, phase = 0) {
@@ -163,6 +165,13 @@ export default function Player25D({ p, onDown, interactive, dim = false, me = fa
         </g>
       )}
 
+      {/* Block: breiter Balken am Boden vor der Blockstellerin – ohne Text erkennbar */}
+      {p.stance === "screen" && (
+        <g transform={`rotate(${(p.screenAngle ?? p.body) * DEG})`} pointerEvents="none">
+          <rect x="5.4" y="-8.2" width="2.8" height="16.4" rx="1.4" fill="#EDE8DC" stroke={s.dark} strokeWidth="0.6" opacity="0.95" />
+        </g>
+      )}
+
       {/* Füße am Boden: Standbreite und Schrittbewegung */}
       <g transform={`rotate(${bodyDeg})`}>
         <Feet p={p} phase={phase} color={s.dark} />
@@ -180,9 +189,6 @@ export default function Player25D({ p, onDown, interactive, dim = false, me = fa
           fill={`url(#torso-${s.id})`} stroke="#1B1410" strokeWidth="0.55" />
         {/* Brustmarke = vorne */}
         <path d="M 3 -2.9 L 7 0 L 3 2.9 Z" fill={s.light} stroke="#1B1410" strokeWidth="0.45" strokeLinejoin="round" />
-        {p.stance === "screen" && (
-          <line x1="4.4" y1="-7" x2="4.4" y2="7" stroke="#EDE8DC" strokeWidth="1.8" strokeLinecap="round" />
-        )}
       </g>
 
       {/* Kopf + Nummer (nicht rotiert → immer lesbar) */}

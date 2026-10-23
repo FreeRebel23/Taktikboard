@@ -11,7 +11,7 @@ export const PASS_KINDS = {
 };
 
 export const HAND_Z = 3.5;
-const BOUNCE_AT = 0.6;
+export const BOUNCE_AT = 0.6;
 
 /** Passart einer Pass-Aktion (lob: true bleibt als Kurzform gültig) */
 export const passKind = (p) => p.kind ?? (p.lob ? "lob" : "chest");
@@ -24,6 +24,7 @@ export function flightHeight(kind, s, d) {
   if (kind === "bounce") {
     return s < BOUNCE_AT ? HAND_Z * (1 - s / BOUNCE_AT) : HAND_Z * ((s - BOUNCE_AT) / (1 - BOUNCE_AT)) * 0.9;
   }
-  const arc = kind === "lob" ? 13 : Math.min(6, d * 0.06);
+  // Lob: hoher Bogen über ausgestreckte Arme (~3 m); Direktpass: flach und hart
+  const arc = kind === "lob" ? 24 : Math.min(3, d * 0.03);
   return HAND_Z + arc * 4 * s * (1 - s);
 }

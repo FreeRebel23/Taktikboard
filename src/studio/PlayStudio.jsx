@@ -372,6 +372,7 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
               <IconButton active={tool === "pen"} onClick={() => setTool((t) => (t === "pen" ? null : "pen"))} title="Stift">✎</IconButton>
               <IconButton active={tool === "arrow"} onClick={() => setTool((t) => (t === "arrow" ? null : "arrow"))} title="Pfeil">↗</IconButton>
               {drawings.length > 0 && <IconButton onClick={() => setDrawings([])} title="Zeichnungen löschen">Leeren</IconButton>}
+              <IconButton onClick={() => setHelp(true)} title="Legende: Zeichen auf dem Feld">?</IconButton>
             </div>
           </>
         )}
