@@ -27,7 +27,10 @@ import {
   flatBeats, segments, addBeat, removeBeat, duplicateBeat, addAction, removeAction, patchAction,
   setRole, addDecision, removeDecision, patchDecision, BUILDER_ACTIONS, targetKind, updateBeat,
   moveBeat, addVia, clearVia, setPoint,
+  setTeamDefense, setDefenseRule, addPrinciple, patchPrinciple, removePrinciple, toggleBeatPrinciple,
 } from "./builderModel.js";
+import { RuleEditor, TeamDefenseButtons, PrincipleEditor, BeatPrinciples, ZonePicker, systemOf } from "./DefenseEditor.jsx";
+import { ZONE_TEMPLATES } from "../play/teamDefense.js";
 import { newPlayId, loadDrafts, clearDraft, findMyPlay } from "../store/playStore.js";
 import { fileNameFor } from "../store/share.js";
 
@@ -56,6 +59,7 @@ const actionLabel = (C, a) => {
   if (a.type === "pass") return `Pass ${L(a.from)} → ${L(a.to)}`;
   if (a.type === "trap") return `${L(a.players[0])} + ${L(a.players[1])}: Trap gegen ${L(a.target)}`;
   if (a.target) return `${L(a.player)}: ${name} → ${L(a.target)}`;
+  if (a.type === "zone") return `${L(a.player)}: Zone → ${C?.play.defense?.zones?.[a.zone]?.label ?? a.zone}`;
   if (a.to) return `${L(a.player)}: ${name} → ${C ? zoneName(C, a.to) : ""}${a.via?.length ? " (mit Umweg)" : ""}`;
   return `${L(a.player)}: ${name}`;
 };
@@ -109,6 +113,18 @@ export default function Builder({ play, origin, onDone, onSave }) {
   const frame = beatInfo ? sampleFrame(C, playback.time) : null;
   const diagram = beatInfo ? beatDiagram(C, beatIdx) : null;
   const curBeat = step >= 0 ? flat[step]?.beat : null;
+  // Mannschaftsverteidigung im Spielzug? Welches System gilt im aktuellen Beat (inkl. weiterlaufender Aktionen)?
+  const usesSystem = useMemo(() => {
+    const walk = (n) => n.beats?.some((b) => b.actions.some((a) => a.type === "man" || a.type === "zone")) || n.decision?.options.some(walk);
+    return !!walk(draft);
+  }, [draft]);
+  const beatSystem = (() => {
+    if (!beatInfo) return null;
+    const types = draft.entities.filter((e) => e.team === "defense").map((e) => beatInfo.byPlayer.get(e.id)?.[0]?.type);
+    if (types.every((t) => t === "man")) return "man";
+    if (types.every((t) => t === "zone")) return `zone:${draft.defense?.template ?? systemOf(draft)}`;
+    return null;
+  })();
   const holderAtStart = beatInfo?.startHolder;
   const team = (id) => draft.entities.find((e) => e.id === id)?.team;
   const label = (id) => draft.entities.find((e) => e.id === id)?.label ?? id;
@@ -237,6 +253,7 @@ export default function Builder({ play, origin, onDone, onSave }) {
     if (tk === "teammate") return `Pass von ${label(sel)}: Tippe auf die Mitspielerin, die den Ball bekommt.`;
     if (tk === "opponent") return `${ACTIONS[pick.type].label} für ${label(sel)}: Tippe auf die Gegenspielerin.`;
     if (tk === "partner") return pick.partner ? "Tippe auf die Ballführerin, die gedoppelt wird." : "Tippe auf die zweite Verteidigerin für den Trap.";
+    if (tk === "zone") return `Zone für ${label(sel)}: Raum unten auswählen.`;
     return "";
   })();
 
@@ -393,6 +410,23 @@ export default function Builder({ play, origin, onDone, onSave }) {
                 <IconButton onClick={() => change({ ...structuredClone(draft), start: { ...draft.start, ball: sel } })} title="Ball geben">Ball an {label(sel)}</IconButton>
               )}
               <Field label="Kurzbeschreibung"><textarea style={{ ...inputStyle, height: 54, resize: "vertical" }} value={draft.summary ?? ""} onChange={(e) => change({ ...draft, summary: e.target.value }, { merge: true })} onBlur={D.endMerge} /></Field>
+              <Field label="Art">
+                <select aria-label="Art des Spielzugs" style={inputStyle} value={draft.category ?? "offense"} onChange={(e) => change({ ...draft, category: e.target.value })}>
+                  <option value="offense">Angriff</option>
+                  <option value="defense">Verteidigung</option>
+                </select>
+              </Field>
+              {usesSystem && (
+                <RuleEditor play={draft} onEndMerge={D.endMerge}
+                  onChange={(path, v, opt) => change(setDefenseRule(draft, path, v), opt)} />
+              )}
+              {!usesSystem && draft.category === "defense" && (
+                <div style={{ fontSize: 13.5, color: C_UI.muted }}>Tipp: Wähle einen Beat und setze unter „Teamverteidigung für alle fünf“ Mann-Mann oder eine Zone – dann erscheinen hier deine Regeln.</div>
+              )}
+              <PrincipleEditor play={draft} onEndMerge={D.endMerge}
+                onAdd={() => change(addPrinciple(draft))}
+                onPatch={(id, patch) => change(patchPrinciple(draft, id, patch), { merge: true })}
+                onRemove={(id) => change(removePrinciple(draft, id))} />
             </div>
           )}
 
@@ -424,6 +458,9 @@ export default function Builder({ play, origin, onDone, onSave }) {
                   Passwege zeigen
                 </label>
               </div>
+              <TeamDefenseButtons current={beatSystem}
+                onSet={(sys, tpl) => change(setTeamDefense(draft, choices, step, sys, beatInfo?.startPos ?? draft.start.positions, tpl))} />
+              <BeatPrinciples play={draft} beat={curBeat} onToggle={(id) => change(toggleBeatPrinciple(draft, choices, step, id))} />
 
               {/* Aktionen des Beats */}
               <div style={{ display: "grid", gap: 6 }}>
@@ -483,6 +520,11 @@ export default function Builder({ play, origin, onDone, onSave }) {
                       );
                     })}
                   </div>
+                  {pick?.type === "zone" && (
+                    <ZonePicker play={draft}
+                      onTemplate={(k) => change({ ...draft, defense: { ...(draft.defense ?? {}), system: "zone", template: k, zones: structuredClone(ZONE_TEMPLATES[k].zones) } })}
+                      onPick={(z) => { change(addAction(draft, choices, step, { type: "zone", player: sel, zone: z }, { after: pick.after })); setPick(null); }} />
+                  )}
                   <Label>Coaching für {label(sel)} in diesem Beat</Label>
                   <Field label="Aufgabe" hint="Leer lassen = das Board beschreibt die Aktion automatisch.">
                     <input style={inputStyle} value={selRole.task ?? ""} onChange={(e) => change(setRole(draft, choices, step, sel, { task: e.target.value }), { merge: true })} onBlur={D.endMerge} />

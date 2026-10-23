@@ -3,6 +3,7 @@
  * Variantenpfad; jede Operation liefert einen neuen Entwurf (Klon). */
 
 import { ACTIONS, actionWindow } from "../play/actions.js";
+import { ZONE_TEMPLATES, setRule } from "../play/teamDefense.js";
 
 const clone = (x) => structuredClone(x);
 
@@ -181,7 +182,7 @@ export function newPlayFrom({ id, court, positions, ball }) {
 /** Welche Aktionen bietet der Builder für ein Team an? */
 export const BUILDER_ACTIONS = {
   offense: ["move", "sprint", "cut", "dribble", "screen", "roll", "pop", "pass", "hold"],
-  defense: ["guard", "deny", "help", "trap", "switch", "closeout", "move", "sprint", "hold"],
+  defense: ["man", "zone", "guard", "deny", "help", "trap", "switch", "closeout", "move", "sprint", "hold"],
 };
 
 /** Welches Ziel braucht eine Aktion? point | player | partner+player | none */
@@ -189,6 +190,8 @@ export function targetKind(type) {
   if (type === "pass") return "teammate";
   if (type === "trap") return "partner";
   if (type === "hold") return "none";
+  if (type === "man") return "opponent";
+  if (type === "zone") return "zone";
   return ACTIONS[type]?.kind === "relation" ? "opponent" : "point";
 }
 
@@ -230,5 +233,91 @@ export function setPoint(play, choices, index, k, which, p) {
     const q = { x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 };
     if (which === "to") a.to = q;
     else a.via = a.via.map((v, i) => (i === which ? q : v));
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Mannschaftsverteidigung und Prinzipien                              */
+/* ------------------------------------------------------------------ */
+
+/** Paare mit kürzester Gesamtdistanz – gierig, reicht für fünf Spielerinnen */
+function greedyAssign(from, to, dist) {
+  const pairs = [];
+  for (const a of from) for (const b of to) pairs.push([dist(a, b), a, b]);
+  pairs.sort((x, y) => x[0] - y[0]);
+  const used = new Set(), out = {};
+  for (const [, a, b] of pairs) if (!(a in out) && !used.has(b)) { out[a] = b; used.add(b); }
+  return out;
+}
+
+/**
+ * Ganze Verteidigung eines Beats auf ein System setzen: "man" (Zuordnung nach Nähe)
+ * oder "zone" mit Vorlage (Räume nach Nähe). positions: Positionen zu Beat-Beginn.
+ * Bisherige Aktionen der Verteidigerinnen in diesem Beat werden ersetzt.
+ */
+export function setTeamDefense(play, choices, index, system, positions, template = "2-3") {
+  let next = clone(play);
+  const defenders = next.entities.filter((e) => e.team === "defense").map((e) => e.id);
+  const attackers = next.entities.filter((e) => e.team === "offense").map((e) => e.id);
+  const d = (a, b) => Math.hypot(positions[a].x - b.x, positions[a].y - b.y);
+  let actions;
+  if (system === "man") {
+    const m = greedyAssign(defenders, attackers, (a, b) => d(a, positions[b]));
+    actions = defenders.filter((id) => m[id]).map((id) => ({ type: "man", player: id, target: m[id] }));
+    next.defense = { ...(next.defense ?? {}), system: "man" };
+  } else {
+    const tpl = ZONE_TEMPLATES[template];
+    const zones = next.defense?.template === template && next.defense?.zones ? next.defense.zones : clone(tpl.zones);
+    const up = (next.attack ?? "up") === "up";
+    const H = next.court === "half" ? 140 : 280;
+    const home = (z) => ({ x: zones[z].home.x, y: up ? zones[z].home.y : H - zones[z].home.y });
+    const m = greedyAssign(defenders, Object.keys(zones), (a, z) => d(a, home(z)));
+    actions = defenders.filter((id) => m[id]).map((id) => ({ type: "zone", player: id, zone: m[id] }));
+    next.defense = { ...(next.defense ?? {}), system: "zone", template, zones };
+  }
+  return updateBeat(next, choices, index, (beat) => {
+    beat.actions = beat.actions.filter((a) => a.type === "pass" || !(defenders.includes(a.player) || a.players?.some((p) => defenders.includes(p))));
+    beat.actions.unshift(...actions);
+  });
+}
+
+/** Regel der Trainerin setzen (Pfad z. B. "help.who") */
+export function setDefenseRule(play, path, value) {
+  const next = clone(play);
+  next.defense = { ...(next.defense ?? {}), rules: setRule(next.defense?.rules, path, value) };
+  return next;
+}
+
+export function addPrinciple(play) {
+  const next = clone(play);
+  const list = next.principles ?? [];
+  let i = list.length + 1;
+  while (list.some((p) => p.id === `p${i}`)) i++;
+  next.principles = [...list, { id: `p${i}`, title: "Neues Prinzip", rule: "", why: "" }];
+  return next;
+}
+
+export function patchPrinciple(play, id, patch) {
+  const next = clone(play);
+  next.principles = (next.principles ?? []).map((p) => (p.id === id ? { ...p, ...patch } : p));
+  return next;
+}
+
+/** Prinzip löschen – auch alle Verweise in Beats (ganzer Baum) */
+export function removePrinciple(play, id) {
+  const next = clone(play);
+  next.principles = (next.principles ?? []).filter((p) => p.id !== id);
+  const walk = (n) => {
+    n.beats?.forEach((b) => { if (b.principles) b.principles = b.principles.filter((x) => x !== id); });
+    n.decision?.options.forEach(walk);
+  };
+  walk(next);
+  return next;
+}
+
+export function toggleBeatPrinciple(play, choices, index, id) {
+  return updateBeat(play, choices, index, (beat) => {
+    const list = beat.principles ?? [];
+    beat.principles = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
   });
 }

@@ -285,7 +285,14 @@ export default function PlayStudio({ play: initialPlay, origin, onClose, onSave,
           <div style={{ fontWeight: 800, fontSize: 16, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{play.name}</div>
           {origin === "shared" && <div style={{ fontSize: 11.5, color: C_UI.warn }}>Geteilter Spielzug</div>}
         </div>
-        <Segmented label="Ansicht" value={mode} onChange={(m) => { if (m === "player") setAnswered({}); setQuiz(null); setMode(m); setTool(null); }}
+        <Segmented label="Ansicht" value={mode} onChange={(m) => {
+            if (m === "player") {
+              setAnswered({});
+              // Ohne Auswahl: Seite passend zur Art des Spielzugs (kann sich im Builder geändert haben)
+              if (!me && !group) setSide(play.category === "defense" ? "defense" : "offense");
+            }
+            setQuiz(null); setMode(m); setTool(null);
+          }}
           options={[
             { value: "coach", label: "Trainer" },
             { value: "player", label: "Lernen", title: "Lernen: Team, einzelne Position oder Zusammenspiel" },

@@ -87,3 +87,50 @@ test("Löschen einer Aktion", () => {
   p = removeAction(p, {}, 0, 0);
   assert.equal(p.beats[0].actions.length, 0);
 });
+
+import { setTeamDefense, setDefenseRule, addPrinciple, patchPrinciple, removePrinciple, toggleBeatPrinciple } from "../src/studio/builderModel.js";
+import { validatePlayTree as vTree } from "../src/play/index.js";
+import { compilePlay as cPlay, sampleFrame as sFrame } from "../src/play/engine.js";
+import { TEMPLATES, templatePositions } from "../src/play/templates.js";
+
+const teamDefBase = () => {
+  const t = TEMPLATES.find((x) => x.id === "five_out") ?? TEMPLATES[0];
+  return newPlayFrom({ id: "my_def", court: t.court, positions: templatePositions(t), ball: t.ball });
+};
+
+test("Builder: ganze Verteidigung als Mann-Mann – jede Verteidigerin bekommt genau eine Angreiferin", () => {
+  const p0 = teamDefBase();
+  const p = setTeamDefense(p0, {}, 0, "man", p0.start.positions);
+  const acts = p.beats[0].actions.filter((a) => a.type === "man");
+  assert.equal(acts.length, 5);
+  assert.equal(new Set(acts.map((a) => a.target)).size, 5);
+  assert.deepEqual(vTree(p).errors, []);
+  const f = sFrame(cPlay(p), 1.4);
+  assert.ok(Object.values(f.players).filter((x) => x.defense).length === 5);
+});
+
+test("Builder: Zone 2-3 und 3-2 – Räume nach Nähe verteilt, Regeln änderbar", () => {
+  const p0 = teamDefBase();
+  for (const tpl of ["2-3", "3-2"]) {
+    const p = setTeamDefense(p0, {}, 0, "zone", p0.start.positions, tpl);
+    const zones = p.beats[0].actions.filter((a) => a.type === "zone").map((a) => a.zone);
+    assert.equal(new Set(zones).size, 5, tpl);
+    assert.equal(p.defense.template, tpl);
+    assert.deepEqual(vTree(p).errors, [], tpl);
+  }
+  const r = setDefenseRule(p0, "help.who", "low");
+  assert.equal(r.defense.rules.help.who, "low");
+  assert.equal(p0.defense, undefined, "Original unverändert");
+});
+
+test("Builder: Prinzipien anlegen, Beat zuordnen, löschen entfernt auch Verweise", () => {
+  let p = addPrinciple(teamDefBase());
+  const id = p.principles[0].id;
+  p = patchPrinciple(p, id, { title: "Ball sehen", rule: "Immer Ball und Gegnerin sehen." });
+  p = toggleBeatPrinciple(p, {}, 0, id);
+  assert.deepEqual(p.beats[0].principles, [id]);
+  assert.deepEqual(vTree(p).warnings.filter((w) => w.includes("Prinzip")), []);
+  p = removePrinciple(p, id);
+  assert.deepEqual(p.beats[0].principles, []);
+  assert.equal(p.principles.length, 0);
+});

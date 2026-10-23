@@ -139,3 +139,31 @@ test("Letzte Änderung geht auch bei sofortigem Neuladen nicht verloren", async 
   await page.getByTitle("Beat 1").click();
   await expect(page.getByText("Aktionen in diesem Beat (2)")).toBeVisible();
 });
+
+test("Trainerin baut eine Mannschaftsverteidigung ohne Code: System, Regel, Prinzip – Team reagiert", async ({ page }) => {
+  const noErrors = collectErrors(page);
+  await newFromTemplate(page, "Unsere Mann-Mann", "5-Out");
+  await page.getByTitle("Beat 1").click();
+  await page.getByTitle("Alle fünf spielen Mann-Mann nach deinen Regeln").click();
+  await expect(page.getByText(/Aktionen in diesem Beat \(5\)/)).toBeVisible();
+  // Regeln und Prinzip auf der Aufstellungsseite
+  await page.getByTitle("Aufstellung").click();
+  await page.getByLabel("Art des Spielzugs").selectOption("defense");
+  await page.getByLabel("Eine Passlänge entfernt").selectOption("gap");
+  await page.getByTitle("Prinzip hinzufügen").click();
+  await page.getByLabel("Titel des Prinzips").fill("Lücke zu");
+  await page.getByLabel("Regel").fill("Eine Passlänge weg: in die Lücke, Drive stoppen.");
+  await page.getByTitle("Beat 1").click();
+  await page.getByRole("button", { name: "Lücke zu" }).click();
+  await expect(page.getByRole("button", { name: "✓ Lücke zu" })).toBeVisible();
+  await page.getByTitle("Spielzug speichern").click();
+  await expect(page.getByRole("status").filter({ hasText: "Gespeichert" })).toBeVisible();
+  // Lernansicht: Team Verteidigung zeigt die Regel "Lücke" und das Prinzip
+  await page.getByTitle("Bearbeiten beenden").click();
+  await page.getByRole("radio", { name: "Lernen" }).click();
+  await page.getByRole("button", { name: "Team", exact: true }).click();
+  await page.getByTitle("Alles abspielen").click();
+  await expect(page.locator('svg text:text-is("LÜCKE")').first()).toBeVisible({ timeout: 8000 });
+  await expect(page.getByRole("button", { name: "Lücke zu" })).toBeVisible();
+  noErrors();
+});
